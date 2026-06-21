@@ -1,3 +1,4 @@
+import re
 import sys
 import tempfile
 import threading
@@ -181,3 +182,13 @@ class ApiResponseTest(unittest.TestCase):
             payload = dashboard.api_dua_output_files(root)
 
         self.assertEqual(payload, {"files": ["EN _SINGLE DUA.xlsx"]})
+
+
+class DashboardUiTest(unittest.TestCase):
+    def test_dry_run_toggle_is_not_enabled_by_default(self):
+        html = (Path(__file__).resolve().parents[1] / "dashboard" / "index.html").read_text(encoding="utf-8")
+
+        match = re.search(r"<input[^>]+id=\"dryRunToggle\"[^>]*>", html)
+
+        self.assertIsNotNone(match)
+        self.assertNotRegex(match.group(0), r"\bchecked\b")
