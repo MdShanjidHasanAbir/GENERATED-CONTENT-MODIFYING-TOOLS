@@ -1,0 +1,76 @@
+<h2>Dashboard Layout Direction</h2>
+<p class="subtitle">Pick the control style that feels most useful for running Hadith and Quran content tools from one place.</p>
+
+<div class="cards">
+  <div class="card" data-choice="operator-console" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">Operator Console</div>
+        <div class="mockup-body">
+          <div style="display:grid;grid-template-columns:180px 1fr;gap:14px;min-height:250px">
+            <div class="mock-sidebar">
+              <div class="label">Content Type</div>
+              <div style="margin:12px 0;padding:10px;border-radius:6px;background:#eef4ff">Hadith</div>
+              <div style="padding:10px;border-radius:6px;background:#f8fafc">Quran</div>
+            </div>
+            <div class="mock-content">
+              <div class="label">Selected Tool</div>
+              <h3 style="margin-top:6px">Single Hadith Content</h3>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0">
+                <div class="placeholder">Input / Output paths</div>
+                <div class="placeholder">Dry run toggle + actions</div>
+              </div>
+              <div class="placeholder" style="height:70px">Live run log and summary files</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. Operator Console</h3>
+      <p>Best for repeated daily use: choose Hadith or Quran, adjust paths, run dry/full jobs, and watch logs in one dense screen.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="guided-runner" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">Guided Runner</div>
+        <div class="mockup-body">
+          <div class="mock-nav">1 Select Content | 2 Check Folders | 3 Run | 4 Review</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px">
+            <div class="placeholder" style="height:105px">Single Hadith Content card</div>
+            <div class="placeholder" style="height:105px">Quran Content card</div>
+          </div>
+          <div style="margin-top:16px" class="placeholder">Next step shows required folders and missing files</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. Guided Runner</h3>
+      <p>Best if mistakes are costly: a step-by-step flow validates folders before the scripts write output.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="compact-tabs" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">Compact Tabs</div>
+        <div class="mockup-body">
+          <div class="mock-nav">Hadith Content | Quran Content</div>
+          <div style="display:grid;grid-template-columns:1.2fr .8fr;gap:12px;margin-top:16px">
+            <div>
+              <div class="placeholder">Script options</div>
+              <div class="placeholder" style="margin-top:10px">Run buttons</div>
+            </div>
+            <div class="placeholder" style="height:130px">Recent output reports</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. Compact Tabs</h3>
+      <p>Best for a small local app: two tabs, minimal setup, quick run buttons, and simple status output.</p>
+    </div>
+  </div>
+</div>

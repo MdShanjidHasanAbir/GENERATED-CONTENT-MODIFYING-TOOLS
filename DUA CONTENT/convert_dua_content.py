@@ -14,11 +14,8 @@ from typing import Iterable
 from openpyxl import Workbook, load_workbook
 
 
-SUPPORTED_JSON_STRUCTURES = ("juz.json", "surah.json", "page.json")
-
-
 @dataclass(frozen=True)
-class QuranConversionSummary:
+class DuaConversionSummary:
     input_file: str
     output_file: str
     sheet_count: int
@@ -26,7 +23,7 @@ class QuranConversionSummary:
 
 
 @dataclass(frozen=True)
-class QuranJsonUpdateSummary:
+class DuaJsonUpdateSummary:
     input_file: str
     output_file: str
     sheet_count: int
@@ -53,10 +50,82 @@ def normalize_id(value) -> str:
     return format(number.normalize(), "f")
 
 
-def normalize_quran_content_json(value, structure_type: str) -> str:
-    if structure_type not in SUPPORTED_JSON_STRUCTURES:
-        raise ValueError(f"Unsupported Quran JSON structure: {structure_type}")
+def language_id(path: Path | str) -> str:
+    name = normalize_text(Path(path).name)
+    match = re.match(r"([A-Za-z]{2})(?:[_\-\s]|$)", name)
+    if match:
+        return match.group(1).lower()
+    return ""
 
+
+def discover_workbooks(directory: Path | str) -> list[Path]:
+    return sorted(path for path in Path(directory).rglob("*.xlsx") if not path.name.startswith("~$"))
+
+
+def convert_dua_content_folder(
+    input_dir: Path | str = Path("INPUT"),
+    output_dir: Path | str = Path("OUTPUT"),
+) -> list[DuaConversionSummary]:
+    input_dir = Path(input_dir)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    summaries = []
+    for input_path in discover_workbooks(input_dir):
+        output_path = output_dir / input_path.name
+        summaries.append(convert_dua_content_workbook(input_path, output_path))
+
+    write_summary_csv(output_dir / "conversion_summary.csv", summaries)
+    return summaries
+
+
+def convert_dua_content_workbook(input_path: Path | str, output_path: Path | str) -> DuaConversionSummary:
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    lang = language_id(input_path)
+    workbook = load_workbook(input_path, read_only=True, data_only=True)
+    output_workbook = Workbook(write_only=True)
+    row_count = 0
+    sheet_count = 0
+    try:
+        for sheet in workbook.worksheets:
+            output_sheet = output_workbook.create_sheet(title=sheet.title)
+            output_sheet.append(["id", "language_id", "contents"])
+            sheet_count += 1
+
+            rows = sheet.iter_rows(values_only=True)
+            header = next(rows, None)
+            columns = _header_map(header)
+            id_index = columns.get("id")
+            response_index = columns.get("response")
+            if id_index is None or response_index is None:
+                continue
+
+            for row in rows:
+                if not row or not any(cell is not None for cell in row):
+                    continue
+                row_id = normalize_id(_cell(row, id_index))
+                contents = normalize_text(_cell(row, response_index))
+                if not row_id or not contents:
+                    continue
+                output_sheet.append([row_id, lang, contents])
+                row_count += 1
+
+        output_workbook.save(output_path)
+    finally:
+        workbook.close()
+
+    return DuaConversionSummary(
+        input_file=input_path.name,
+        output_file=output_path.name,
+        sheet_count=sheet_count,
+        row_count=row_count,
+    )
+
+
+def normalize_dua_content_json(value) -> str:
     source = _source_content_data(value)
     converted = {
         "meta": {
@@ -67,15 +136,110 @@ def normalize_quran_content_json(value, structure_type: str) -> str:
             "title": normalize_text(_heading_title(source)),
             "description": normalize_text(_heading_description(source)),
         },
+        "faqs": _faq_list(source.get("faqs")),
     }
-
-    if structure_type == "surah.json":
-        converted["lessons"] = _string_list(source.get("lessons"))
-        converted["faqs"] = _faq_list(source.get("faqs"))
-    else:
-        converted["searching_terms"] = _string_list(source.get("searching_terms"))
-
     return json.dumps(converted, ensure_ascii=False, separators=(",", ":"))
+
+
+def available_dua_output_workbooks(output_dir: Path | str = Path("OUTPUT")) -> list[Path]:
+    return discover_workbooks(output_dir)
+
+
+def update_dua_output_files(
+    output_dir: Path | str = Path("OUTPUT"),
+    updated_dir: Path | str = Path("UPDATED CONTENT"),
+    filenames: Iterable[str] | None = None,
+) -> list[DuaJsonUpdateSummary]:
+    output_dir = Path(output_dir)
+    updated_dir = Path(updated_dir)
+
+    if filenames:
+        input_paths = []
+        for filename in filenames:
+            input_path = output_dir / filename
+            if not input_path.exists():
+                raise FileNotFoundError(f"Selected Dua output file not found: {filename}")
+            input_paths.append(input_path)
+    else:
+        input_paths = available_dua_output_workbooks(output_dir)
+
+    summaries = []
+    for input_path in input_paths:
+        output_path = updated_dir / input_path.relative_to(output_dir)
+        summaries.append(update_dua_output_workbook(input_path, output_path))
+    return summaries
+
+
+def update_dua_output_workbook(input_path: Path | str, output_path: Path | str) -> DuaJsonUpdateSummary:
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    workbook = load_workbook(input_path, read_only=True, data_only=True)
+    output_workbook = Workbook(write_only=True)
+    row_count = 0
+    sheet_count = 0
+    try:
+        for sheet in workbook.worksheets:
+            output_sheet = output_workbook.create_sheet(title=sheet.title)
+            rows = sheet.iter_rows(values_only=True)
+            header = next(rows, None)
+            if header is None:
+                continue
+            header_list = list(header)
+            columns = _header_map(header)
+            content_index = columns.get("contents")
+            output_sheet.append(header_list)
+            sheet_count += 1
+
+            for row in rows:
+                output_row = list(row)
+                if content_index is not None and content_index < len(output_row) and output_row[content_index]:
+                    output_row[content_index] = normalize_dua_content_json(output_row[content_index])
+                    row_count += 1
+                output_sheet.append(output_row)
+        output_workbook.save(output_path)
+    finally:
+        workbook.close()
+
+    return DuaJsonUpdateSummary(
+        input_file=input_path.name,
+        output_file=output_path.name,
+        sheet_count=sheet_count,
+        row_count=row_count,
+    )
+
+
+def write_summary_csv(path: Path | str, summaries: Iterable[DuaConversionSummary]) -> None:
+    path = Path(path)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["input_file", "output_file", "sheet_count", "row_count"])
+        writer.writeheader()
+        for summary in summaries:
+            writer.writerow(
+                {
+                    "input_file": summary.input_file,
+                    "output_file": summary.output_file,
+                    "sheet_count": summary.sheet_count,
+                    "row_count": summary.row_count,
+                }
+            )
+
+
+def print_conversion_summary(summaries: Iterable[DuaConversionSummary]) -> None:
+    for summary in summaries:
+        print(
+            f"{summary.input_file} -> {summary.output_file}: "
+            f"sheets={summary.sheet_count}, rows={summary.row_count}"
+        )
+
+
+def print_update_summary(summaries: Iterable[DuaJsonUpdateSummary]) -> None:
+    for summary in summaries:
+        print(
+            f"{summary.input_file} -> {summary.output_file}: "
+            f"sheets={summary.sheet_count}, updated_rows={summary.row_count}"
+        )
 
 
 def _source_content_data(value) -> dict:
@@ -85,8 +249,11 @@ def _source_content_data(value) -> dict:
         return {"heading": {"description": text}}
     if isinstance(data, list):
         data = next((item for item in data if isinstance(item, dict)), {})
+    keyword = data.get("keyword") if isinstance(data, dict) else None
     if isinstance(data, dict) and isinstance(data.get("result"), dict):
-        data = data["result"]
+        data = {**data["result"]}
+        if keyword and "keyword" not in data:
+            data["keyword"] = keyword
     return data if isinstance(data, dict) else {"heading": {"description": text}}
 
 
@@ -122,23 +289,14 @@ def _heading_title(data: dict):
     heading = data.get("heading")
     if isinstance(heading, dict):
         return heading.get("title")
-    return heading or data.get("title")
+    return heading or data.get("title") or data.get("keyword")
 
 
 def _heading_description(data: dict):
     heading = data.get("heading")
     if isinstance(heading, dict) and heading.get("description") is not None:
         return heading.get("description")
-    return data.get("summary") or data.get("description")
-
-
-def _string_list(value) -> list[str]:
-    if isinstance(value, list):
-        return [normalize_text(item) for item in value if normalize_text(item)]
-    text = normalize_text(value)
-    if not text:
-        return []
-    return [part.strip() for part in text.split(",") if part.strip()]
+    return data.get("description") or data.get("summary")
 
 
 def _faq_list(value) -> list[dict]:
@@ -155,201 +313,6 @@ def _faq_list(value) -> list[dict]:
     return faqs
 
 
-def quran_id_column(path: Path | str) -> str:
-    name = normalize_text(Path(path).stem).casefold()
-    if "juz" in name:
-        return "juz_id"
-    if "page" in name:
-        return "page_id"
-    if "surah" in name:
-        return "surah_id"
-    return "id"
-
-
-def language_id(path: Path | str) -> str:
-    name = normalize_text(Path(path).name)
-    match = re.match(r"([A-Za-z]{2})(?:[_\-\s]|$)", name)
-    if match:
-        return match.group(1).lower()
-    return ""
-
-
-def discover_workbooks(directory: Path | str) -> list[Path]:
-    return sorted(path for path in Path(directory).rglob("*.xlsx") if not path.name.startswith("~$"))
-
-
-def available_quran_output_workbooks(output_dir: Path | str = Path("OUTPUT")) -> list[Path]:
-    return discover_workbooks(output_dir)
-
-
-def convert_quran_content_folder(
-    input_dir: Path | str = Path("INPUT"),
-    output_dir: Path | str = Path("OUTPUT"),
-) -> list[QuranConversionSummary]:
-    input_dir = Path(input_dir)
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    summaries = []
-    for input_path in discover_workbooks(input_dir):
-        output_path = output_dir / input_path.name
-        summaries.append(convert_quran_content_workbook(input_path, output_path))
-
-    write_summary_csv(output_dir / "conversion_summary.csv", summaries)
-    return summaries
-
-
-def convert_quran_content_workbook(input_path: Path | str, output_path: Path | str) -> QuranConversionSummary:
-    input_path = Path(input_path)
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    id_header = quran_id_column(input_path)
-    lang = language_id(input_path)
-    workbook = load_workbook(input_path, read_only=True, data_only=True)
-    output_workbook = Workbook(write_only=True)
-    row_count = 0
-    sheet_count = 0
-    try:
-        for sheet in workbook.worksheets:
-            output_sheet = output_workbook.create_sheet(title=sheet.title)
-            output_sheet.append([id_header, "language_id", "contents"])
-            sheet_count += 1
-
-            rows = sheet.iter_rows(values_only=True)
-            header = next(rows, None)
-            columns = _header_map(header)
-            id_index = columns.get("id")
-            response_index = columns.get("response")
-            if id_index is None or response_index is None:
-                continue
-
-            for row in rows:
-                if not row or not any(cell is not None for cell in row):
-                    continue
-                row_id = normalize_id(_cell(row, id_index))
-                contents = normalize_text(_cell(row, response_index))
-                if not row_id or not contents:
-                    continue
-                output_sheet.append([row_id, lang, contents])
-                row_count += 1
-
-        output_workbook.save(output_path)
-    finally:
-        workbook.close()
-
-    return QuranConversionSummary(
-        input_file=input_path.name,
-        output_file=output_path.name,
-        sheet_count=sheet_count,
-        row_count=row_count,
-    )
-
-
-def update_quran_output_files(
-    output_dir: Path | str = Path("OUTPUT"),
-    updated_dir: Path | str = Path("UPDATED OUTPUT"),
-    structure_type: str = "juz.json",
-    filenames: Iterable[str] | None = None,
-) -> list[QuranJsonUpdateSummary]:
-    output_dir = Path(output_dir)
-    updated_dir = Path(updated_dir)
-    if structure_type not in SUPPORTED_JSON_STRUCTURES:
-        raise ValueError(f"Unsupported Quran JSON structure: {structure_type}")
-
-    if filenames:
-        input_paths = []
-        for filename in filenames:
-            input_path = output_dir / filename
-            if not input_path.exists():
-                raise FileNotFoundError(f"Selected Quran output file not found: {filename}")
-            input_paths.append(input_path)
-    else:
-        input_paths = available_quran_output_workbooks(output_dir)
-
-    summaries = []
-    for input_path in input_paths:
-        output_path = updated_dir / input_path.relative_to(output_dir)
-        summaries.append(update_quran_output_workbook(input_path, output_path, structure_type))
-    return summaries
-
-
-def update_quran_output_workbook(
-    input_path: Path | str,
-    output_path: Path | str,
-    structure_type: str,
-) -> QuranJsonUpdateSummary:
-    input_path = Path(input_path)
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    workbook = load_workbook(input_path, read_only=True, data_only=True)
-    output_workbook = Workbook(write_only=True)
-    row_count = 0
-    sheet_count = 0
-    try:
-        for sheet in workbook.worksheets:
-            output_sheet = output_workbook.create_sheet(title=sheet.title)
-            rows = sheet.iter_rows(values_only=True)
-            header = next(rows, None)
-            if header is None:
-                continue
-            header_list = list(header)
-            columns = _header_map(header)
-            content_index = columns.get("contents")
-            output_sheet.append(header_list)
-            sheet_count += 1
-
-            for row in rows:
-                output_row = list(row)
-                if content_index is not None and content_index < len(output_row) and output_row[content_index]:
-                    output_row[content_index] = normalize_quran_content_json(output_row[content_index], structure_type)
-                    row_count += 1
-                output_sheet.append(output_row)
-        output_workbook.save(output_path)
-    finally:
-        workbook.close()
-
-    return QuranJsonUpdateSummary(
-        input_file=input_path.name,
-        output_file=output_path.name,
-        sheet_count=sheet_count,
-        row_count=row_count,
-    )
-
-
-def write_summary_csv(path: Path | str, summaries: Iterable[QuranConversionSummary]) -> None:
-    path = Path(path)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["input_file", "output_file", "sheet_count", "row_count"])
-        writer.writeheader()
-        for summary in summaries:
-            writer.writerow(
-                {
-                    "input_file": summary.input_file,
-                    "output_file": summary.output_file,
-                    "sheet_count": summary.sheet_count,
-                    "row_count": summary.row_count,
-                }
-            )
-
-
-def print_summary(summaries: Iterable[QuranConversionSummary]) -> None:
-    for summary in summaries:
-        print(
-            f"{summary.input_file} -> {summary.output_file}: "
-            f"sheets={summary.sheet_count}, rows={summary.row_count}"
-        )
-
-
-def print_update_summary(summaries: Iterable[QuranJsonUpdateSummary]) -> None:
-    for summary in summaries:
-        print(
-            f"{summary.input_file} -> {summary.output_file}: "
-            f"sheets={summary.sheet_count}, updated_rows={summary.row_count}"
-        )
-
-
 def _header_map(header) -> dict[str, int]:
     if not header:
         return {}
@@ -361,7 +324,7 @@ def _cell(row, index: int):
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Convert and update Quran content workbooks.")
+    parser = argparse.ArgumentParser(description="Convert and update Dua content workbooks.")
     subparsers = parser.add_subparsers(dest="command")
 
     convert_parser = subparsers.add_parser("convert", help="Convert input workbooks to id/language_id/contents columns.")
@@ -370,8 +333,7 @@ def main(argv: list[str] | None = None) -> int:
 
     update_parser = subparsers.add_parser("update-output-json", help="Rewrite OUTPUT workbook contents JSON.")
     update_parser.add_argument("--output-dir", type=Path, default=Path("OUTPUT"))
-    update_parser.add_argument("--updated-dir", type=Path, default=Path("UPDATED OUTPUT"))
-    update_parser.add_argument("--structure", choices=SUPPORTED_JSON_STRUCTURES, required=True)
+    update_parser.add_argument("--updated-dir", type=Path, default=Path("UPDATED CONTENT"))
     update_parser.add_argument("--files", nargs="*", default=None)
 
     parser.add_argument("--input-dir", type=Path, default=Path("INPUT"))
@@ -380,24 +342,23 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "update-output-json":
         try:
-            summaries = update_quran_output_files(args.output_dir, args.updated_dir, args.structure, args.files)
-        except (FileNotFoundError, ValueError) as exc:
+            summaries = update_dua_output_files(args.output_dir, args.updated_dir, args.files)
+        except FileNotFoundError as exc:
             print(str(exc), file=sys.stderr)
             return 1
         print_update_summary(summaries)
         if not summaries:
-            print("No Quran output workbooks found.", file=sys.stderr)
+            print("No Dua output workbooks found.", file=sys.stderr)
             return 1
-        print(f"Updated Quran content workbooks written to: {args.updated_dir}")
+        print(f"Updated Dua content workbooks written to: {args.updated_dir}")
         return 0
 
-    summaries = convert_quran_content_folder(args.input_dir, args.output_dir)
-    print_summary(summaries)
-
+    summaries = convert_dua_content_folder(args.input_dir, args.output_dir)
+    print_conversion_summary(summaries)
     if not summaries:
-        print("No Quran content workbooks found.", file=sys.stderr)
+        print("No Dua input workbooks found.", file=sys.stderr)
         return 1
-    print(f"Converted Quran content workbooks written to: {args.output_dir}")
+    print(f"Converted Dua content workbooks written to: {args.output_dir}")
     return 0
 
 

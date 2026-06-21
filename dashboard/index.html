@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Content Script Dashboard</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">DB</span>
+          <div>
+            <h1>Content Dashboard</h1>
+            <p>Local script console</p>
+          </div>
+        </div>
+        <nav class="workflow-nav" id="workflowNav"></nav>
+      </aside>
+
+      <section class="workspace">
+        <header class="workspace-header">
+          <div>
+            <p class="eyebrow">Selected workflow</p>
+            <h2 id="workflowTitle">Loading...</h2>
+            <p id="workflowDescription"></p>
+          </div>
+          <div class="status-pill" id="statusPill">Idle</div>
+        </header>
+
+        <section class="control-grid">
+          <div class="panel controls-panel">
+            <h3>Run Controls</h3>
+            <label class="toggle-row" id="dryRunRow">
+              <input type="checkbox" id="dryRunToggle" checked>
+              <span>Dry run</span>
+            </label>
+            <button class="run-button" id="runButton" type="button">Run workflow</button>
+          </div>
+
+          <div class="panel paths-panel">
+            <h3>Folders</h3>
+            <div class="path-groups">
+              <div>
+                <h4>Inputs</h4>
+                <ul id="inputPaths"></ul>
+              </div>
+              <div>
+                <h4>Outputs</h4>
+                <ul id="outputPaths"></ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel quran-json-panel" id="quranJsonPanel">
+          <div class="quran-json-header">
+            <div>
+              <h3>Update Output JSON</h3>
+              <p>Write selected Quran OUTPUT workbooks to UPDATED OUTPUT with the chosen contents structure.</p>
+            </div>
+            <div class="status-pill" id="quranUpdateStatus">Idle</div>
+          </div>
+
+          <div class="json-update-grid">
+            <label class="field-label">
+              <span>JSON structure</span>
+              <select id="quranStructureSelect">
+                <option value="juz.json">juz.json</option>
+                <option value="surah.json">surah.json</option>
+                <option value="page.json">page.json</option>
+              </select>
+            </label>
+
+            <div class="file-picker">
+              <div class="file-picker-header">
+                <h4>Output files</h4>
+                <button class="text-button" id="selectAllQuranFiles" type="button">Select all</button>
+              </div>
+              <div class="file-list" id="quranOutputFiles"></div>
+            </div>
+
+            <button class="run-button" id="updateQuranJsonButton" type="button">Update selected JSON</button>
+          </div>
+
+          <pre class="update-log" id="quranUpdateLog">No JSON update started yet.</pre>
+        </section>
+
+        <section class="panel quran-json-panel" id="duaJsonPanel">
+          <div class="quran-json-header">
+            <div>
+              <h3>Update Output JSON</h3>
+              <p>Write selected Dua OUTPUT workbooks to UPDATED CONTENT with the approved contents structure.</p>
+            </div>
+            <div class="status-pill" id="duaUpdateStatus">Idle</div>
+          </div>
+
+          <div class="json-update-grid dua-update-grid">
+            <div class="file-picker">
+              <div class="file-picker-header">
+                <h4>Output files</h4>
+                <button class="text-button" id="selectAllDuaFiles" type="button">Select all</button>
+              </div>
+              <div class="file-list" id="duaOutputFiles"></div>
+            </div>
+
+            <button class="run-button" id="updateDuaJsonButton" type="button">Update selected JSON</button>
+          </div>
+
+          <pre class="update-log" id="duaUpdateLog">No JSON update started yet.</pre>
+        </section>
+
+        <section class="panel log-panel">
+          <div class="log-header">
+            <h3>Run Log</h3>
+            <span id="exitCode"></span>
+          </div>
+          <pre id="logOutput">No run started yet.</pre>
+        </section>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>

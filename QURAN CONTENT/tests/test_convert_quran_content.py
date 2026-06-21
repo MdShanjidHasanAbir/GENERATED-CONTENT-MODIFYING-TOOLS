@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import sys
 import tempfile
 import unittest
@@ -96,11 +97,121 @@ class ConvertQuranContentTest(unittest.TestCase):
             self.assertTrue((output_dir / "EN_Quran Juz Content.xlsx").exists())
             self.assertTrue((output_dir / "EN_Quran Surah Content.xlsx").exists())
 
+    def test_normalizes_wrapped_result_to_juz_json_shape(self):
+        source = json.dumps(
+            [
+                {
+                    "keyword": "al quran juz 1",
+                    "result": {
+                        "meta": {"title": "Juz title", "description": "Juz description"},
+                        "heading": "Al Quran Juz 1",
+                        "summary": "Juz summary",
+                        "searching_terms": "term one, term two, term three",
+                    },
+                }
+            ]
+        )
+
+        converted = json.loads(quran.normalize_quran_content_json(source, "juz.json"))
+
+        self.assertEqual(set(converted), {"meta", "heading", "searching_terms"})
+        self.assertEqual(converted["meta"], {"title": "Juz title", "description": "Juz description"})
+        self.assertEqual(converted["heading"], {"title": "Al Quran Juz 1", "description": "Juz summary"})
+        self.assertEqual(converted["searching_terms"], ["term one", "term two", "term three"])
+
+    def test_normalizes_direct_surah_json_shape(self):
+        source = json.dumps(
+            {
+                "meta": {"title": "Surah title", "description": "Surah description"},
+                "heading": {"title": "Surah Al Fatihah", "description": "Heading description"},
+                "lessons": ["lesson one"],
+                "faqs": [{"question": "Question?", "answer": "Answer."}],
+                "searching_terms": ["ignored for surah"],
+            }
+        )
+
+        converted = json.loads(quran.normalize_quran_content_json(source, "surah.json"))
+
+        self.assertEqual(set(converted), {"meta", "heading", "lessons", "faqs"})
+        self.assertEqual(converted["meta"]["title"], "Surah title")
+        self.assertEqual(converted["heading"], {"title": "Surah Al Fatihah", "description": "Heading description"})
+        self.assertEqual(converted["lessons"], ["lesson one"])
+        self.assertEqual(converted["faqs"], [{"question": "Question?", "answer": "Answer."}])
+
+    def test_normalizes_invalid_json_to_valid_page_shape(self):
+        converted = json.loads(quran.normalize_quran_content_json("plain text content", "page.json"))
+
+        self.assertEqual(set(converted), {"meta", "heading", "searching_terms"})
+        self.assertEqual(converted["meta"], {"title": "", "description": ""})
+        self.assertEqual(converted["heading"], {"title": "", "description": "plain text content"})
+        self.assertEqual(converted["searching_terms"], [])
+
+    def test_updates_selected_output_workbooks_to_updated_output_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output_dir = root / "OUTPUT"
+            updated_dir = root / "UPDATED OUTPUT"
+            output_dir.mkdir()
+            source_name = "EN_Quran Juz Content.xlsx"
+            self._write_converted_output_workbook(
+                output_dir / source_name,
+                headers=["juz_id", "language_id", "contents"],
+                rows=[
+                    [
+                        "1",
+                        "en",
+                        json.dumps(
+                            [
+                                {
+                                    "result": {
+                                        "meta": {"title": "Juz title", "description": "Juz description"},
+                                        "heading": "Al Quran Juz 1",
+                                        "summary": "Juz summary",
+                                        "searching_terms": "term one, term two",
+                                    }
+                                }
+                            ]
+                        ),
+                    ]
+                ],
+            )
+
+            summaries = quran.update_quran_output_files(output_dir, updated_dir, "juz.json", [source_name])
+
+            updated_path = updated_dir / source_name
+            rows = self._read_rows(updated_path)
+            converted = json.loads(rows[1][2])
+            self.assertEqual([summary.output_file for summary in summaries], [source_name])
+            self.assertEqual(rows[0], ("juz_id", "language_id", "contents"))
+            self.assertEqual(converted["heading"], {"title": "Al Quran Juz 1", "description": "Juz summary"})
+            self.assertEqual(converted["searching_terms"], ["term one", "term two"])
+
+    def test_update_output_files_reports_missing_selected_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output_dir = root / "OUTPUT"
+            updated_dir = root / "UPDATED OUTPUT"
+            output_dir.mkdir()
+
+            with self.assertRaises(FileNotFoundError) as context:
+                quran.update_quran_output_files(output_dir, updated_dir, "surah.json", ["missing.xlsx"])
+
+            self.assertIn("missing.xlsx", str(context.exception))
+
     def _write_source_workbook(self, path, rows):
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "Results"
         sheet.append(["ID", "Platform", "Keyword", "Success", "Timestamp", "Response"])
+        for row in rows:
+            sheet.append(row)
+        workbook.save(path)
+
+    def _write_converted_output_workbook(self, path, headers, rows):
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Results"
+        sheet.append(headers)
         for row in rows:
             sheet.append(row)
         workbook.save(path)
