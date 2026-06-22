@@ -6,6 +6,8 @@ import subprocess
 import sys
 import threading
 import time
+import base64
+import binascii
 from dataclasses import dataclass, field
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -326,6 +328,77 @@ def api_dua_output_files(root_dir: Path = ROOT_DIR) -> dict:
     return {"files": _relative_xlsx_files(output_dir)}
 
 
+def api_upload_target_files(workflow_id: str, root_dir: Path = ROOT_DIR) -> dict:
+    target_dir = upload_target_dir(workflow_id, root_dir)
+    if target_dir is None:
+        return {"files": []}
+    return {"files": _relative_xlsx_files(target_dir)}
+
+
+def save_uploaded_files(workflow_id: str, payload: dict, root_dir: Path = ROOT_DIR) -> dict:
+    target_dir = upload_target_dir(workflow_id, root_dir)
+    if target_dir is None:
+        return {"saved": [], "skipped": [{"name": workflow_id, "reason": "Unknown upload target."}]}
+
+    target_dir.mkdir(parents=True, exist_ok=True)
+    overwrite = bool(payload.get("overwrite"))
+    saved: list[str] = []
+    skipped: list[dict[str, str]] = []
+
+    for item in payload.get("files") or []:
+        name = str(item.get("name") or "")
+        reason = _invalid_upload_name_reason(name)
+        if reason:
+            skipped.append({"name": name, "reason": reason})
+            continue
+
+        output_path = target_dir / name
+        if output_path.exists() and not overwrite:
+            skipped.append({"name": name, "reason": "File already exists."})
+            continue
+
+        try:
+            content = _decode_upload_content(str(item.get("content") or ""))
+        except ValueError as exc:
+            skipped.append({"name": name, "reason": str(exc)})
+            continue
+
+        output_path.write_bytes(content)
+        saved.append(name)
+
+    return {"saved": saved, "skipped": skipped}
+
+
+def upload_target_dir(workflow_id: str, root_dir: Path = ROOT_DIR) -> Path | None:
+    targets = {
+        "hadith": root_dir / "SINGLE HADITH CONTENT" / "OUTPUT",
+        "quran": root_dir / "QURAN CONTENT" / "INPUT",
+        "dua": root_dir / "DUA CONTENT" / "INPUT",
+    }
+    return targets.get(workflow_id)
+
+
+def _invalid_upload_name_reason(name: str) -> str | None:
+    if not name:
+        return "Filename is required."
+    if Path(name).name != name or "/" in name or "\\" in name:
+        return "Folder paths are not allowed."
+    if name.startswith("~$"):
+        return "Temporary Excel files are not allowed."
+    if Path(name).suffix.lower() != ".xlsx":
+        return "Only .xlsx files are allowed."
+    return None
+
+
+def _decode_upload_content(content: str) -> bytes:
+    if "," in content:
+        content = content.split(",", 1)[1]
+    try:
+        return base64.b64decode(content, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("Invalid file content.") from exc
+
+
 def _relative_xlsx_files(directory: Path) -> list[str]:
     if not directory.exists():
         return []
@@ -357,6 +430,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/dua-output-files":
             self._send_json(api_dua_output_files(ROOT_DIR))
             return
+        if parsed.path.startswith("/api/upload-target-files/"):
+            workflow_id = parsed.path.rsplit("/", 1)[-1]
+            self._send_json(api_upload_target_files(workflow_id, ROOT_DIR))
+            return
         if parsed.path.startswith("/api/status/"):
             workflow_id = parsed.path.rsplit("/", 1)[-1]
             self._send_json(self.manager.status(workflow_id))
@@ -365,14 +442,22 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path.startswith("/api/upload/"):
+            workflow_id = parsed.path.rsplit("/", 1)[-1]
+            try:
+                options = self._read_json_body()
+            except json.JSONDecodeError:
+                self._send_json({"error": "Invalid JSON"}, HTTPStatus.BAD_REQUEST)
+                return
+            self._send_json(save_uploaded_files(workflow_id, options, ROOT_DIR))
+            return
+
         if not parsed.path.startswith("/api/start/"):
             self._send_json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
             return
         workflow_id = parsed.path.rsplit("/", 1)[-1]
         try:
-            length = int(self.headers.get("Content-Length", "0"))
-            body = self.rfile.read(length).decode("utf-8") if length else "{}"
-            options = json.loads(body or "{}")
+            options = self._read_json_body()
         except json.JSONDecodeError:
             self._send_json({"error": "Invalid JSON"}, HTTPStatus.BAD_REQUEST)
             return
@@ -388,6 +473,11 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def _read_json_body(self) -> dict:
+        length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(length).decode("utf-8") if length else "{}"
+        return json.loads(body or "{}")
 
     def _serve_static(self, request_path: str) -> None:
         relative = "index.html" if request_path in {"", "/"} else request_path.lstrip("/")

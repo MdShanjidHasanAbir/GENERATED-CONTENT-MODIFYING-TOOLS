@@ -40,6 +40,26 @@
           </div>
         </section>
 
+        <section class="panel quran-json-panel" id="hadithUploadPanel">
+          <div class="quran-json-header">
+            <div>
+              <h3>Upload Output Files</h3>
+              <p>Add selected Excel files to SINGLE HADITH CONTENT OUTPUT.</p>
+            </div>
+          </div>
+
+          <div class="json-update-grid dua-update-grid">
+            <label class="field-label">
+              <span>Excel files</span>
+              <input id="hadithUploadInput" type="file" accept=".xlsx" multiple>
+            </label>
+
+            <button class="run-button" id="hadithUploadButton" type="button">Upload selected</button>
+          </div>
+
+          <pre class="update-log" id="hadithUploadLog">No upload started yet.</pre>
+        </section>
+
         <section class="panel quran-json-panel" id="hadithFinalPanel">
           <div class="quran-json-header">
             <div>
@@ -88,6 +108,26 @@
           <pre class="update-log" id="hadithUpdatedLog">No updated-content parse started yet.</pre>
         </section>
 
+        <section class="panel quran-json-panel" id="quranUploadPanel">
+          <div class="quran-json-header">
+            <div>
+              <h3>Upload Input Files</h3>
+              <p>Add selected Excel files to QURAN CONTENT INPUT.</p>
+            </div>
+          </div>
+
+          <div class="json-update-grid dua-update-grid">
+            <label class="field-label">
+              <span>Excel files</span>
+              <input id="quranUploadInput" type="file" accept=".xlsx" multiple>
+            </label>
+
+            <button class="run-button" id="quranUploadButton" type="button">Upload selected</button>
+          </div>
+
+          <pre class="update-log" id="quranUploadLog">No upload started yet.</pre>
+        </section>
+
         <section class="panel quran-json-panel" id="quranJsonPanel">
           <div class="quran-json-header">
             <div>
@@ -119,6 +159,26 @@
           </div>
 
           <pre class="update-log" id="quranUpdateLog">No JSON update started yet.</pre>
+        </section>
+
+        <section class="panel quran-json-panel" id="duaUploadPanel">
+          <div class="quran-json-header">
+            <div>
+              <h3>Upload Input Files</h3>
+              <p>Add selected Excel files to DUA CONTENT INPUT.</p>
+            </div>
+          </div>
+
+          <div class="json-update-grid dua-update-grid">
+            <label class="field-label">
+              <span>Excel files</span>
+              <input id="duaUploadInput" type="file" accept=".xlsx" multiple>
+            </label>
+
+            <button class="run-button" id="duaUploadButton" type="button">Upload selected</button>
+          </div>
+
+          <pre class="update-log" id="duaUploadLog">No upload started yet.</pre>
         </section>
 
         <section class="panel quran-json-panel" id="duaJsonPanel">

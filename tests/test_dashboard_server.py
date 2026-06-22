@@ -3,6 +3,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import base64
 from pathlib import Path
 
 import dashboard_server as dashboard
@@ -257,6 +258,70 @@ class ApiResponseTest(unittest.TestCase):
 
         self.assertEqual(payload, {"files": ["EN _SINGLE DUA.xlsx"]})
 
+    def test_upload_target_files_use_approved_folders(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "QURAN CONTENT" / "INPUT").mkdir(parents=True)
+            (root / "DUA CONTENT" / "INPUT").mkdir(parents=True)
+            (root / "SINGLE HADITH CONTENT" / "OUTPUT").mkdir(parents=True)
+            (root / "QURAN CONTENT" / "INPUT" / "Quran.xlsx").touch()
+            (root / "DUA CONTENT" / "INPUT" / "Dua.xlsx").touch()
+            (root / "SINGLE HADITH CONTENT" / "OUTPUT" / "Hadith.xlsx").touch()
+
+            self.assertEqual(dashboard.api_upload_target_files("quran", root), {"files": ["Quran.xlsx"]})
+            self.assertEqual(dashboard.api_upload_target_files("dua", root), {"files": ["Dua.xlsx"]})
+            self.assertEqual(dashboard.api_upload_target_files("hadith", root), {"files": ["Hadith.xlsx"]})
+
+    def test_save_uploaded_files_writes_xlsx_to_target_and_rejects_unsafe_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            content = base64.b64encode(b"excel bytes").decode("ascii")
+
+            payload = dashboard.save_uploaded_files(
+                "quran",
+                {
+                    "overwrite": False,
+                    "files": [
+                        {"name": "Quran.xlsx", "content": content},
+                        {"name": "~$Quran.xlsx", "content": content},
+                        {"name": "../outside.xlsx", "content": content},
+                        {"name": "notes.txt", "content": content},
+                    ],
+                },
+                root,
+            )
+
+            target = root / "QURAN CONTENT" / "INPUT" / "Quran.xlsx"
+            self.assertEqual(target.read_bytes(), b"excel bytes")
+            self.assertEqual(payload["saved"], ["Quran.xlsx"])
+            self.assertEqual(
+                payload["skipped"],
+                [
+                    {"name": "~$Quran.xlsx", "reason": "Temporary Excel files are not allowed."},
+                    {"name": "../outside.xlsx", "reason": "Folder paths are not allowed."},
+                    {"name": "notes.txt", "reason": "Only .xlsx files are allowed."},
+                ],
+            )
+            self.assertFalse((root / "outside.xlsx").exists())
+
+    def test_save_uploaded_files_skips_existing_without_overwrite(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target_dir = root / "DUA CONTENT" / "INPUT"
+            target_dir.mkdir(parents=True)
+            (target_dir / "Dua.xlsx").write_bytes(b"old")
+            content = base64.b64encode(b"new").decode("ascii")
+
+            payload = dashboard.save_uploaded_files(
+                "dua",
+                {"overwrite": False, "files": [{"name": "Dua.xlsx", "content": content}]},
+                root,
+            )
+
+            self.assertEqual((target_dir / "Dua.xlsx").read_bytes(), b"old")
+            self.assertEqual(payload["saved"], [])
+            self.assertEqual(payload["skipped"], [{"name": "Dua.xlsx", "reason": "File already exists."}])
+
 
 class DashboardUiTest(unittest.TestCase):
     def test_dry_run_toggle_is_not_enabled_by_default(self):
@@ -272,3 +337,10 @@ class DashboardUiTest(unittest.TestCase):
 
         self.assertNotIn('id="inputPaths"', html)
         self.assertNotIn('id="outputPaths"', html)
+
+    def test_upload_controls_exist_for_main_workflows(self):
+        html = (Path(__file__).resolve().parents[1] / "dashboard" / "index.html").read_text(encoding="utf-8")
+
+        self.assertIn('id="hadithUploadInput"', html)
+        self.assertIn('id="quranUploadInput"', html)
+        self.assertIn('id="duaUploadInput"', html)

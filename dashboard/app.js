@@ -22,6 +22,10 @@ const dryRunToggle = document.getElementById("dryRunToggle");
 const runButton = document.getElementById("runButton");
 const logOutput = document.getElementById("logOutput");
 const exitCode = document.getElementById("exitCode");
+const hadithUploadPanel = document.getElementById("hadithUploadPanel");
+const hadithUploadInput = document.getElementById("hadithUploadInput");
+const hadithUploadButton = document.getElementById("hadithUploadButton");
+const hadithUploadLog = document.getElementById("hadithUploadLog");
 const hadithFinalPanel = document.getElementById("hadithFinalPanel");
 const hadithFinalStatus = document.getElementById("hadithFinalStatus");
 const hadithReconciledFiles = document.getElementById("hadithReconciledFiles");
@@ -35,6 +39,10 @@ const selectAllHadithBookWiseFinalFiles = document.getElementById("selectAllHadi
 const updateHadithContentButton = document.getElementById("updateHadithContentButton");
 const hadithUpdatedLog = document.getElementById("hadithUpdatedLog");
 const quranJsonPanel = document.getElementById("quranJsonPanel");
+const quranUploadPanel = document.getElementById("quranUploadPanel");
+const quranUploadInput = document.getElementById("quranUploadInput");
+const quranUploadButton = document.getElementById("quranUploadButton");
+const quranUploadLog = document.getElementById("quranUploadLog");
 const quranUpdateStatus = document.getElementById("quranUpdateStatus");
 const quranStructureSelect = document.getElementById("quranStructureSelect");
 const quranOutputFiles = document.getElementById("quranOutputFiles");
@@ -42,6 +50,10 @@ const selectAllQuranFiles = document.getElementById("selectAllQuranFiles");
 const updateQuranJsonButton = document.getElementById("updateQuranJsonButton");
 const quranUpdateLog = document.getElementById("quranUpdateLog");
 const duaJsonPanel = document.getElementById("duaJsonPanel");
+const duaUploadPanel = document.getElementById("duaUploadPanel");
+const duaUploadInput = document.getElementById("duaUploadInput");
+const duaUploadButton = document.getElementById("duaUploadButton");
+const duaUploadLog = document.getElementById("duaUploadLog");
 const duaUpdateStatus = document.getElementById("duaUpdateStatus");
 const duaOutputFiles = document.getElementById("duaOutputFiles");
 const selectAllDuaFiles = document.getElementById("selectAllDuaFiles");
@@ -140,6 +152,7 @@ function render() {
   runButton.textContent = status.state === "running" ? "Running..." : `Run ${workflow.name}`;
   logOutput.textContent = status.logs && status.logs.length ? status.logs.join("\n") : "No run started yet.";
   exitCode.textContent = status.exit_code === null || status.exit_code === undefined ? "" : `Exit code: ${status.exit_code}`;
+  renderUploadPanels(workflow);
   renderHadithPanels(workflow, hadithFinal, hadithUpdated);
   renderQuranJsonPanel(workflow, quranUpdate);
   renderDuaJsonPanel(workflow, duaUpdate);
@@ -150,6 +163,12 @@ function render() {
       render();
     });
   });
+}
+
+function renderUploadPanels(workflow) {
+  hadithUploadPanel.classList.toggle("visible", workflow.id === "hadith");
+  quranUploadPanel.classList.toggle("visible", workflow.id === "quran");
+  duaUploadPanel.classList.toggle("visible", workflow.id === "dua");
 }
 
 function renderHadithPanels(workflow, hadithFinal, hadithUpdated) {
@@ -382,6 +401,76 @@ async function startDuaJsonUpdate() {
   render();
 }
 
+async function uploadWorkflowFiles(workflowId, inputElement, logElement) {
+  let files = Array.from(inputElement.files || []);
+  if (!files.length) {
+    logElement.textContent = "Choose one or more .xlsx files first.";
+    return;
+  }
+
+  const targetPayload = await fetchJson(`/api/upload-target-files/${workflowId}`);
+  const existingFiles = new Set(targetPayload.files || []);
+  const replacing = files.filter((file) => existingFiles.has(file.name));
+  let overwrite = false;
+  if (replacing.length) {
+    overwrite = window.confirm(`Replace ${replacing.length} existing file(s)?`);
+    if (!overwrite) {
+      files = files.filter((file) => !existingFiles.has(file.name));
+    }
+  }
+
+  if (!files.length) {
+    logElement.textContent = "No files uploaded.";
+    return;
+  }
+
+  const encodedFiles = [];
+  for (const file of files) {
+    encodedFiles.push({
+      name: file.name,
+      content: await readFileAsDataUrl(file),
+    });
+  }
+
+  const result = await fetchJson(`/api/upload/${workflowId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ overwrite, files: encodedFiles }),
+  });
+
+  inputElement.value = "";
+  logElement.textContent = uploadSummary(result);
+  await refreshFileLists();
+  render();
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(reader.result));
+    reader.addEventListener("error", () => reject(reader.error || new Error("File read failed.")));
+    reader.readAsDataURL(file);
+  });
+}
+
+function uploadSummary(result) {
+  const lines = [];
+  const saved = result.saved || [];
+  const skipped = result.skipped || [];
+  lines.push(saved.length ? `Uploaded: ${saved.join(", ")}` : "Uploaded: none");
+  if (skipped.length) {
+    lines.push("Skipped:");
+    skipped.forEach((item) => lines.push(`${item.name}: ${item.reason}`));
+  }
+  return lines.join("\n");
+}
+
+async function refreshFileLists() {
+  await loadHadithFiles();
+  await loadQuranOutputFiles();
+  await loadDuaOutputFiles();
+}
+
 function startPolling() {
   if (state.pollTimer) clearInterval(state.pollTimer);
   state.pollTimer = setInterval(refreshSelectedStatus, 1000);
@@ -461,6 +550,24 @@ buildHadithFinalButton.addEventListener("click", () => {
 updateHadithContentButton.addEventListener("click", () => {
   startHadithUpdatedContent().catch((error) => {
     hadithUpdatedLog.textContent = error.message;
+  });
+});
+
+hadithUploadButton.addEventListener("click", () => {
+  uploadWorkflowFiles("hadith", hadithUploadInput, hadithUploadLog).catch((error) => {
+    hadithUploadLog.textContent = error.message;
+  });
+});
+
+quranUploadButton.addEventListener("click", () => {
+  uploadWorkflowFiles("quran", quranUploadInput, quranUploadLog).catch((error) => {
+    quranUploadLog.textContent = error.message;
+  });
+});
+
+duaUploadButton.addEventListener("click", () => {
+  uploadWorkflowFiles("dua", duaUploadInput, duaUploadLog).catch((error) => {
+    duaUploadLog.textContent = error.message;
   });
 });
 
