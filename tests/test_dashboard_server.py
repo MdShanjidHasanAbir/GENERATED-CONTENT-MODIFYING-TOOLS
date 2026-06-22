@@ -344,3 +344,18 @@ class DashboardUiTest(unittest.TestCase):
         self.assertIn('id="hadithUploadInput"', html)
         self.assertIn('id="quranUploadInput"', html)
         self.assertIn('id="duaUploadInput"', html)
+
+    def test_dashboard_uses_professional_operator_labels_and_larger_type(self):
+        dashboard_dir = Path(__file__).resolve().parents[1] / "dashboard"
+        html = (dashboard_dir / "index.html").read_text(encoding="utf-8")
+        css = (dashboard_dir / "styles.css").read_text(encoding="utf-8")
+
+        for label in (
+            "Workflow Actions",
+            "Upload Excel Workbooks",
+            "Build Book-Wise Final",
+            "Update Final Content",
+            "Execution Log",
+        ):
+            self.assertIn(label, html)
+        self.assertRegex(css, r"html\s*\{\s*font-size:\s*18px;")

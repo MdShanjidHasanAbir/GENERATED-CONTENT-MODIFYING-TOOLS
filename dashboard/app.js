@@ -149,8 +149,8 @@ function render() {
   statusPill.className = `status-pill ${status.state}`;
   dryRunRow.style.display = workflow.supports_dry_run ? "flex" : "none";
   runButton.disabled = status.state === "running";
-  runButton.textContent = status.state === "running" ? "Running..." : `Run ${workflow.name}`;
-  logOutput.textContent = status.logs && status.logs.length ? status.logs.join("\n") : "No run started yet.";
+  runButton.textContent = status.state === "running" ? "Workflow Running..." : `Run ${workflow.name}`;
+  logOutput.textContent = status.logs && status.logs.length ? status.logs.join("\n") : "Workflow activity will appear here.";
   exitCode.textContent = status.exit_code === null || status.exit_code === undefined ? "" : `Exit code: ${status.exit_code}`;
   renderUploadPanels(workflow);
   renderHadithPanels(workflow, hadithFinal, hadithUpdated);
@@ -193,11 +193,11 @@ function renderHadithPanels(workflow, hadithFinal, hadithUpdated) {
   const finalCount = state.selectedHadithReconciledFiles.size;
   buildHadithFinalButton.disabled = hadithFinal.state === "running" || finalCount === 0;
   buildHadithFinalButton.textContent = hadithFinal.state === "running"
-    ? "Parsing..."
-    : `Parse ${finalCount} selected`;
+    ? "Building..."
+    : `Build ${finalCount} selected`;
   hadithFinalLog.textContent = hadithFinal.logs && hadithFinal.logs.length
     ? hadithFinal.logs.join("\n")
-    : "No book-wise final parse started yet.";
+    : "Book-wise final activity will appear here.";
 
   hadithUpdatedStatus.textContent = labelForState(hadithUpdated.state);
   hadithUpdatedStatus.className = `status-pill ${hadithUpdated.state}`;
@@ -219,7 +219,7 @@ function renderHadithPanels(workflow, hadithFinal, hadithUpdated) {
     : `Update ${updatedCount} selected`;
   hadithUpdatedLog.textContent = hadithUpdated.logs && hadithUpdated.logs.length
     ? hadithUpdated.logs.join("\n")
-    : "No updated-content parse started yet.";
+    : "Final content update activity will appear here.";
 }
 
 function renderDuaJsonPanel(workflow, duaUpdate) {
@@ -251,7 +251,7 @@ function renderDuaJsonPanel(workflow, duaUpdate) {
     : `Update ${selectedCount} selected`;
   duaUpdateLog.textContent = duaUpdate.logs && duaUpdate.logs.length
     ? duaUpdate.logs.join("\n")
-    : "No JSON update started yet.";
+    : "Structured output activity will appear here.";
 }
 
 function renderQuranJsonPanel(workflow, quranUpdate) {
@@ -283,7 +283,7 @@ function renderQuranJsonPanel(workflow, quranUpdate) {
     : `Update ${selectedCount} selected`;
   quranUpdateLog.textContent = quranUpdate.logs && quranUpdate.logs.length
     ? quranUpdate.logs.join("\n")
-    : "No JSON update started yet.";
+    : "Structured output activity will appear here.";
 }
 
 function renderQuranFileOption(fileName) {
@@ -404,7 +404,7 @@ async function startDuaJsonUpdate() {
 async function uploadWorkflowFiles(workflowId, inputElement, logElement) {
   let files = Array.from(inputElement.files || []);
   if (!files.length) {
-    logElement.textContent = "Choose one or more .xlsx files first.";
+    logElement.textContent = "Choose one or more Excel workbooks first.";
     return;
   }
 

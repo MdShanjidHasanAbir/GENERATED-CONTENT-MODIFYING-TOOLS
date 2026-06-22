@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Content Script Dashboard</title>
+    <title>Content Operations Dashboard</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
@@ -12,17 +12,17 @@
         <div class="brand">
           <span class="brand-mark">DB</span>
           <div>
-            <h1>Content Dashboard</h1>
-            <p>Local script console</p>
+            <h1>Content Operations</h1>
+            <p>Workbook processing console</p>
           </div>
         </div>
-        <nav class="workflow-nav" id="workflowNav"></nav>
+        <nav class="workflow-nav" id="workflowNav" aria-label="Content workflows"></nav>
       </aside>
 
       <section class="workspace">
         <header class="workspace-header">
           <div>
-            <p class="eyebrow">Selected workflow</p>
+            <p class="eyebrow">Active Workflow</p>
             <h2 id="workflowTitle">Loading...</h2>
             <p id="workflowDescription"></p>
           </div>
@@ -31,40 +31,40 @@
 
         <section class="control-grid">
           <div class="panel controls-panel">
-            <h3>Run Controls</h3>
+            <h3>Workflow Actions</h3>
             <label class="toggle-row" id="dryRunRow">
               <input type="checkbox" id="dryRunToggle">
-              <span>Dry run</span>
+              <span>Preview changes only (dry run)</span>
             </label>
-            <button class="run-button" id="runButton" type="button">Run workflow</button>
+            <button class="run-button" id="runButton" type="button">Run Selected Workflow</button>
           </div>
         </section>
 
         <section class="panel quran-json-panel" id="hadithUploadPanel">
           <div class="quran-json-header">
             <div>
-              <h3>Upload Output Files</h3>
-              <p>Add selected Excel files to SINGLE HADITH CONTENT OUTPUT.</p>
+              <h3>Upload Excel Workbooks</h3>
+              <p>Add selected Excel workbooks to SINGLE HADITH CONTENT / OUTPUT before reconciliation.</p>
             </div>
           </div>
 
           <div class="json-update-grid dua-update-grid">
             <label class="field-label">
-              <span>Excel files</span>
+              <span>Excel workbook files</span>
               <input id="hadithUploadInput" type="file" accept=".xlsx" multiple>
             </label>
 
-            <button class="run-button" id="hadithUploadButton" type="button">Upload selected</button>
+            <button class="run-button" id="hadithUploadButton" type="button">Upload Workbooks</button>
           </div>
 
-          <pre class="update-log" id="hadithUploadLog">No upload started yet.</pre>
+          <pre class="update-log" id="hadithUploadLog">Upload activity will appear here.</pre>
         </section>
 
         <section class="panel quran-json-panel" id="hadithFinalPanel">
           <div class="quran-json-header">
             <div>
-              <h3>Parse Reconciled Output</h3>
-              <p>Write selected reconciled_output workbooks to BOOK WISE FINAL.</p>
+              <h3>Build Book-Wise Final</h3>
+              <p>Convert selected reconciled output workbooks into BOOK WISE FINAL files.</p>
             </div>
             <div class="status-pill" id="hadithFinalStatus">Idle</div>
           </div>
@@ -72,23 +72,23 @@
           <div class="json-update-grid dua-update-grid">
             <div class="file-picker">
               <div class="file-picker-header">
-                <h4>Reconciled files</h4>
-                <button class="text-button" id="selectAllHadithReconciledFiles" type="button">Select all</button>
+                <h4>Reconciled output files</h4>
+                <button class="text-button" id="selectAllHadithReconciledFiles" type="button">Select All</button>
               </div>
               <div class="file-list" id="hadithReconciledFiles"></div>
             </div>
 
-            <button class="run-button" id="buildHadithFinalButton" type="button">Parse selected</button>
+            <button class="run-button" id="buildHadithFinalButton" type="button">Build Selected Files</button>
           </div>
 
-          <pre class="update-log" id="hadithFinalLog">No book-wise final parse started yet.</pre>
+          <pre class="update-log" id="hadithFinalLog">Book-wise final activity will appear here.</pre>
         </section>
 
         <section class="panel quran-json-panel" id="hadithUpdatedPanel">
           <div class="quran-json-header">
             <div>
-              <h3>Update Book Wise Content</h3>
-              <p>Write selected BOOK WISE FINAL workbooks to BOOK WISE FINAL UPDATED CONTENT.</p>
+              <h3>Update Final Content</h3>
+              <p>Write selected BOOK WISE FINAL workbooks into BOOK WISE FINAL UPDATED CONTENT.</p>
             </div>
             <div class="status-pill" id="hadithUpdatedStatus">Idle</div>
           </div>
@@ -96,50 +96,50 @@
           <div class="json-update-grid dua-update-grid">
             <div class="file-picker">
               <div class="file-picker-header">
-                <h4>Book wise final files</h4>
-                <button class="text-button" id="selectAllHadithBookWiseFinalFiles" type="button">Select all</button>
+                <h4>Book-wise final files</h4>
+                <button class="text-button" id="selectAllHadithBookWiseFinalFiles" type="button">Select All</button>
               </div>
               <div class="file-list" id="hadithBookWiseFinalFiles"></div>
             </div>
 
-            <button class="run-button" id="updateHadithContentButton" type="button">Update selected</button>
+            <button class="run-button" id="updateHadithContentButton" type="button">Update Selected Files</button>
           </div>
 
-          <pre class="update-log" id="hadithUpdatedLog">No updated-content parse started yet.</pre>
+          <pre class="update-log" id="hadithUpdatedLog">Final content update activity will appear here.</pre>
         </section>
 
         <section class="panel quran-json-panel" id="quranUploadPanel">
           <div class="quran-json-header">
             <div>
-              <h3>Upload Input Files</h3>
-              <p>Add selected Excel files to QURAN CONTENT INPUT.</p>
+              <h3>Upload Excel Workbooks</h3>
+              <p>Add selected Excel workbooks to QURAN CONTENT / INPUT.</p>
             </div>
           </div>
 
           <div class="json-update-grid dua-update-grid">
             <label class="field-label">
-              <span>Excel files</span>
+              <span>Excel workbook files</span>
               <input id="quranUploadInput" type="file" accept=".xlsx" multiple>
             </label>
 
-            <button class="run-button" id="quranUploadButton" type="button">Upload selected</button>
+            <button class="run-button" id="quranUploadButton" type="button">Upload Workbooks</button>
           </div>
 
-          <pre class="update-log" id="quranUploadLog">No upload started yet.</pre>
+          <pre class="update-log" id="quranUploadLog">Upload activity will appear here.</pre>
         </section>
 
         <section class="panel quran-json-panel" id="quranJsonPanel">
           <div class="quran-json-header">
             <div>
-              <h3>Update Output JSON</h3>
-              <p>Write selected Quran OUTPUT workbooks to UPDATED OUTPUT with the chosen contents structure.</p>
+              <h3>Update Structured Output</h3>
+              <p>Write selected Quran OUTPUT workbooks to UPDATED OUTPUT with the chosen content structure.</p>
             </div>
             <div class="status-pill" id="quranUpdateStatus">Idle</div>
           </div>
 
           <div class="json-update-grid">
             <label class="field-label">
-              <span>JSON structure</span>
+              <span>JSON content structure</span>
               <select id="quranStructureSelect">
                 <option value="juz.json">juz.json</option>
                 <option value="surah.json">surah.json</option>
@@ -149,43 +149,43 @@
 
             <div class="file-picker">
               <div class="file-picker-header">
-                <h4>Output files</h4>
-                <button class="text-button" id="selectAllQuranFiles" type="button">Select all</button>
+                <h4>Output workbook files</h4>
+                <button class="text-button" id="selectAllQuranFiles" type="button">Select All</button>
               </div>
               <div class="file-list" id="quranOutputFiles"></div>
             </div>
 
-            <button class="run-button" id="updateQuranJsonButton" type="button">Update selected JSON</button>
+            <button class="run-button" id="updateQuranJsonButton" type="button">Update Selected Output</button>
           </div>
 
-          <pre class="update-log" id="quranUpdateLog">No JSON update started yet.</pre>
+          <pre class="update-log" id="quranUpdateLog">Structured output activity will appear here.</pre>
         </section>
 
         <section class="panel quran-json-panel" id="duaUploadPanel">
           <div class="quran-json-header">
             <div>
-              <h3>Upload Input Files</h3>
-              <p>Add selected Excel files to DUA CONTENT INPUT.</p>
+              <h3>Upload Excel Workbooks</h3>
+              <p>Add selected Excel workbooks to DUA CONTENT / INPUT.</p>
             </div>
           </div>
 
           <div class="json-update-grid dua-update-grid">
             <label class="field-label">
-              <span>Excel files</span>
+              <span>Excel workbook files</span>
               <input id="duaUploadInput" type="file" accept=".xlsx" multiple>
             </label>
 
-            <button class="run-button" id="duaUploadButton" type="button">Upload selected</button>
+            <button class="run-button" id="duaUploadButton" type="button">Upload Workbooks</button>
           </div>
 
-          <pre class="update-log" id="duaUploadLog">No upload started yet.</pre>
+          <pre class="update-log" id="duaUploadLog">Upload activity will appear here.</pre>
         </section>
 
         <section class="panel quran-json-panel" id="duaJsonPanel">
           <div class="quran-json-header">
             <div>
-              <h3>Update Output JSON</h3>
-              <p>Write selected Dua OUTPUT workbooks to UPDATED CONTENT with the approved contents structure.</p>
+              <h3>Update Structured Output</h3>
+              <p>Write selected Dua OUTPUT workbooks to UPDATED CONTENT with the approved content structure.</p>
             </div>
             <div class="status-pill" id="duaUpdateStatus">Idle</div>
           </div>
@@ -193,24 +193,24 @@
           <div class="json-update-grid dua-update-grid">
             <div class="file-picker">
               <div class="file-picker-header">
-                <h4>Output files</h4>
-                <button class="text-button" id="selectAllDuaFiles" type="button">Select all</button>
+                <h4>Output workbook files</h4>
+                <button class="text-button" id="selectAllDuaFiles" type="button">Select All</button>
               </div>
               <div class="file-list" id="duaOutputFiles"></div>
             </div>
 
-            <button class="run-button" id="updateDuaJsonButton" type="button">Update selected JSON</button>
+            <button class="run-button" id="updateDuaJsonButton" type="button">Update Selected Output</button>
           </div>
 
-          <pre class="update-log" id="duaUpdateLog">No JSON update started yet.</pre>
+          <pre class="update-log" id="duaUpdateLog">Structured output activity will appear here.</pre>
         </section>
 
         <section class="panel log-panel">
           <div class="log-header">
-            <h3>Run Log</h3>
+            <h3>Execution Log</h3>
             <span id="exitCode"></span>
           </div>
-          <pre id="logOutput">No run started yet.</pre>
+          <pre id="logOutput">Workflow activity will appear here.</pre>
         </section>
       </section>
     </main>
