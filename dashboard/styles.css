@@ -241,7 +241,7 @@ h4 {
 
 .control-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  grid-template-columns: minmax(280px, 360px);
   gap: 22px;
 }
 

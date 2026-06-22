@@ -71,6 +71,26 @@ def build_workflow_registry(root_dir: Path = ROOT_DIR) -> dict[str, Workflow]:
             ),
             supports_dry_run=True,
         ),
+        "hadith-book-wise-final": Workflow(
+            id="hadith-book-wise-final",
+            name="Build Book Wise Final",
+            description="Parse selected reconciled_output workbooks into book-wise final workbooks.",
+            script="reconcile_hadith_outputs.py",
+            working_dir=hadith_dir,
+            input_paths=(hadith_dir / "reconciled_output", hadith_dir / "BOOKS.xlsx"),
+            output_paths=(hadith_dir / "BOOK WISE FINAL",),
+            command_builder=_hadith_book_wise_final_command,
+        ),
+        "hadith-updated-content": Workflow(
+            id="hadith-updated-content",
+            name="Update Book Wise Final Content",
+            description="Parse selected book-wise final workbooks into updated content workbooks.",
+            script="reconcile_hadith_outputs.py",
+            working_dir=hadith_dir,
+            input_paths=(hadith_dir / "BOOK WISE FINAL", hadith_dir / "BOOKS.xlsx"),
+            output_paths=(hadith_dir / "BOOK WISE FINAL UPDATED CONTENT",),
+            command_builder=_hadith_updated_content_command,
+        ),
         "quran": Workflow(
             id="quran",
             name="Quran Content",
@@ -112,6 +132,32 @@ def build_workflow_registry(root_dir: Path = ROOT_DIR) -> dict[str, Workflow]:
             command_builder=_dua_update_json_command,
         ),
     }
+
+
+def _hadith_book_wise_final_command(options: dict) -> list[str]:
+    files = options.get("files") or []
+    command = [
+        sys.executable,
+        "reconcile_hadith_outputs.py",
+        "write-book-wise-final",
+    ]
+    if files:
+        command.append("--files")
+        command.extend(str(file_name) for file_name in files)
+    return command
+
+
+def _hadith_updated_content_command(options: dict) -> list[str]:
+    files = options.get("files") or []
+    command = [
+        sys.executable,
+        "reconcile_hadith_outputs.py",
+        "update-final-content",
+    ]
+    if files:
+        command.append("--files")
+        command.extend(str(file_name) for file_name in files)
+    return command
 
 
 def _quran_update_json_command(options: dict) -> list[str]:
@@ -260,16 +306,34 @@ def api_workflows(workflows: dict[str, Workflow], manager: JobManager) -> dict:
     }
 
 
+def api_hadith_reconciled_files(root_dir: Path = ROOT_DIR) -> dict:
+    output_dir = root_dir / "SINGLE HADITH CONTENT" / "reconciled_output"
+    return {"files": _relative_xlsx_files(output_dir)}
+
+
+def api_hadith_book_wise_final_files(root_dir: Path = ROOT_DIR) -> dict:
+    final_dir = root_dir / "SINGLE HADITH CONTENT" / "BOOK WISE FINAL"
+    return {"files": _relative_xlsx_files(final_dir)}
+
+
 def api_quran_output_files(root_dir: Path = ROOT_DIR) -> dict:
     output_dir = root_dir / "QURAN CONTENT" / "OUTPUT"
-    files = sorted(path.name for path in output_dir.glob("*.xlsx") if not path.name.startswith("~$"))
-    return {"files": files}
+    return {"files": _relative_xlsx_files(output_dir)}
 
 
 def api_dua_output_files(root_dir: Path = ROOT_DIR) -> dict:
     output_dir = root_dir / "DUA CONTENT" / "OUTPUT"
-    files = sorted(path.name for path in output_dir.glob("*.xlsx") if not path.name.startswith("~$"))
-    return {"files": files}
+    return {"files": _relative_xlsx_files(output_dir)}
+
+
+def _relative_xlsx_files(directory: Path) -> list[str]:
+    if not directory.exists():
+        return []
+    return sorted(
+        path.relative_to(directory).as_posix()
+        for path in directory.rglob("*.xlsx")
+        if not path.name.startswith("~$")
+    )
 
 
 class DashboardRequestHandler(BaseHTTPRequestHandler):
@@ -280,6 +344,12 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/workflows":
             self._send_json(api_workflows(self.workflows, self.manager))
+            return
+        if parsed.path == "/api/hadith-reconciled-files":
+            self._send_json(api_hadith_reconciled_files(ROOT_DIR))
+            return
+        if parsed.path == "/api/hadith-book-wise-final-files":
+            self._send_json(api_hadith_book_wise_final_files(ROOT_DIR))
             return
         if parsed.path == "/api/quran-output-files":
             self._send_json(api_quran_output_files(ROOT_DIR))

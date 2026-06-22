@@ -12,8 +12,21 @@ class WorkflowRegistryTest(unittest.TestCase):
     def test_registry_contains_hadith_and_quran_workflows(self):
         registry = dashboard.build_workflow_registry(Path.cwd())
 
-        self.assertEqual(set(registry), {"hadith", "quran", "quran-update-json", "dua", "dua-update-json"})
+        self.assertEqual(
+            set(registry),
+            {
+                "hadith",
+                "hadith-book-wise-final",
+                "hadith-updated-content",
+                "quran",
+                "quran-update-json",
+                "dua",
+                "dua-update-json",
+            },
+        )
         self.assertEqual(registry["hadith"].name, "Single Hadith Content")
+        self.assertEqual(registry["hadith-book-wise-final"].name, "Build Book Wise Final")
+        self.assertEqual(registry["hadith-updated-content"].name, "Update Book Wise Final Content")
         self.assertEqual(registry["quran"].name, "Quran Content")
         self.assertEqual(registry["quran-update-json"].name, "Update Quran Output JSON")
         self.assertEqual(registry["dua"].name, "Dua Content")
@@ -38,6 +51,39 @@ class WorkflowRegistryTest(unittest.TestCase):
         command = registry["quran"].command({"dry_run": True})
 
         self.assertEqual(command, [sys.executable, "convert_quran_content.py"])
+
+    def test_hadith_stage_commands_include_selected_files(self):
+        registry = dashboard.build_workflow_registry(Path.cwd())
+
+        final_command = registry["hadith-book-wise-final"].command(
+            {"files": ["EN_BUKHARI_MARGE.xlsx", "BN_MUSLIM_MARGE.xlsx"]}
+        )
+        updated_command = registry["hadith-updated-content"].command(
+            {"files": ["EN/EN_BUKHARI.xlsx", "BN/BN_MUSLIM.xlsx"]}
+        )
+
+        self.assertEqual(
+            final_command,
+            [
+                sys.executable,
+                "reconcile_hadith_outputs.py",
+                "write-book-wise-final",
+                "--files",
+                "EN_BUKHARI_MARGE.xlsx",
+                "BN_MUSLIM_MARGE.xlsx",
+            ],
+        )
+        self.assertEqual(
+            updated_command,
+            [
+                sys.executable,
+                "reconcile_hadith_outputs.py",
+                "update-final-content",
+                "--files",
+                "EN/EN_BUKHARI.xlsx",
+                "BN/BN_MUSLIM.xlsx",
+            ],
+        )
 
     def test_quran_update_json_command_includes_structure_and_files(self):
         registry = dashboard.build_workflow_registry(Path.cwd())
@@ -156,6 +202,34 @@ class ApiResponseTest(unittest.TestCase):
 
         self.assertEqual([item["id"] for item in payload["workflows"]], ["hadith", "quran", "dua"])
         self.assertEqual(payload["statuses"]["hadith"]["state"], "idle")
+        self.assertEqual(payload["statuses"]["hadith-book-wise-final"]["state"], "idle")
+
+    def test_api_hadith_reconciled_files_lists_xlsx_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output_dir = root / "SINGLE HADITH CONTENT" / "reconciled_output"
+            output_dir.mkdir(parents=True)
+            (output_dir / "EN_BUKHARI_MARGE.xlsx").touch()
+            (output_dir / "~$temporary.xlsx").touch()
+            (output_dir / "reconciliation_summary.csv").touch()
+
+            payload = dashboard.api_hadith_reconciled_files(root)
+
+        self.assertEqual(payload, {"files": ["EN_BUKHARI_MARGE.xlsx"]})
+
+    def test_api_hadith_book_wise_final_files_lists_relative_xlsx_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            final_dir = root / "SINGLE HADITH CONTENT" / "BOOK WISE FINAL"
+            (final_dir / "EN").mkdir(parents=True)
+            (final_dir / "BN").mkdir(parents=True)
+            (final_dir / "EN" / "EN_BUKHARI.xlsx").touch()
+            (final_dir / "BN" / "BN_MUSLIM.xlsx").touch()
+            (final_dir / "EN" / "~$temporary.xlsx").touch()
+
+            payload = dashboard.api_hadith_book_wise_final_files(root)
+
+        self.assertEqual(payload, {"files": ["BN/BN_MUSLIM.xlsx", "EN/EN_BUKHARI.xlsx"]})
 
     def test_api_quran_output_files_lists_xlsx_files(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -192,3 +266,9 @@ class DashboardUiTest(unittest.TestCase):
 
         self.assertIsNotNone(match)
         self.assertNotRegex(match.group(0), r"\bchecked\b")
+
+    def test_folder_path_panel_is_not_rendered(self):
+        html = (Path(__file__).resolve().parents[1] / "dashboard" / "index.html").read_text(encoding="utf-8")
+
+        self.assertNotIn('id="inputPaths"', html)
+        self.assertNotIn('id="outputPaths"', html)

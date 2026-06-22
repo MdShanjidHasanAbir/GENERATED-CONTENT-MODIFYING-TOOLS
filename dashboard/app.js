@@ -2,6 +2,10 @@ const state = {
   workflows: [],
   statuses: {},
   selectedId: "hadith",
+  hadithReconciledFiles: [],
+  selectedHadithReconciledFiles: new Set(),
+  hadithBookWiseFinalFiles: [],
+  selectedHadithBookWiseFinalFiles: new Set(),
   quranOutputFiles: [],
   selectedQuranFiles: new Set(),
   duaOutputFiles: [],
@@ -16,10 +20,20 @@ const statusPill = document.getElementById("statusPill");
 const dryRunRow = document.getElementById("dryRunRow");
 const dryRunToggle = document.getElementById("dryRunToggle");
 const runButton = document.getElementById("runButton");
-const inputPaths = document.getElementById("inputPaths");
-const outputPaths = document.getElementById("outputPaths");
 const logOutput = document.getElementById("logOutput");
 const exitCode = document.getElementById("exitCode");
+const hadithFinalPanel = document.getElementById("hadithFinalPanel");
+const hadithFinalStatus = document.getElementById("hadithFinalStatus");
+const hadithReconciledFiles = document.getElementById("hadithReconciledFiles");
+const selectAllHadithReconciledFiles = document.getElementById("selectAllHadithReconciledFiles");
+const buildHadithFinalButton = document.getElementById("buildHadithFinalButton");
+const hadithFinalLog = document.getElementById("hadithFinalLog");
+const hadithUpdatedPanel = document.getElementById("hadithUpdatedPanel");
+const hadithUpdatedStatus = document.getElementById("hadithUpdatedStatus");
+const hadithBookWiseFinalFiles = document.getElementById("hadithBookWiseFinalFiles");
+const selectAllHadithBookWiseFinalFiles = document.getElementById("selectAllHadithBookWiseFinalFiles");
+const updateHadithContentButton = document.getElementById("updateHadithContentButton");
+const hadithUpdatedLog = document.getElementById("hadithUpdatedLog");
 const quranJsonPanel = document.getElementById("quranJsonPanel");
 const quranUpdateStatus = document.getElementById("quranUpdateStatus");
 const quranStructureSelect = document.getElementById("quranStructureSelect");
@@ -46,10 +60,40 @@ async function loadWorkflows() {
   const payload = await fetchJson("/api/workflows");
   state.workflows = payload.workflows;
   state.statuses = payload.statuses;
+  await loadHadithFiles();
   await loadQuranOutputFiles();
   await loadDuaOutputFiles();
   render();
   startPolling();
+}
+
+async function loadHadithFiles() {
+  const previousReconciledFiles = state.hadithReconciledFiles;
+  const previousReconciledSelection = state.selectedHadithReconciledFiles;
+  const previousFinalFiles = state.hadithBookWiseFinalFiles;
+  const previousFinalSelection = state.selectedHadithBookWiseFinalFiles;
+  const reconciledPayload = await fetchJson("/api/hadith-reconciled-files");
+  const finalPayload = await fetchJson("/api/hadith-book-wise-final-files");
+  state.hadithReconciledFiles = reconciledPayload.files || [];
+  state.selectedHadithReconciledFiles = nextSelection(
+    state.hadithReconciledFiles,
+    previousReconciledFiles,
+    previousReconciledSelection,
+  );
+  state.hadithBookWiseFinalFiles = finalPayload.files || [];
+  state.selectedHadithBookWiseFinalFiles = nextSelection(
+    state.hadithBookWiseFinalFiles,
+    previousFinalFiles,
+    previousFinalSelection,
+  );
+}
+
+function nextSelection(currentFiles, previousFiles, previousSelection) {
+  const allWereSelected = previousFiles.length === 0 || previousFiles.length === previousSelection.size;
+  if (allWereSelected) {
+    return new Set(currentFiles);
+  }
+  return new Set(currentFiles.filter((fileName) => previousSelection.has(fileName)));
 }
 
 async function loadQuranOutputFiles() {
@@ -76,6 +120,8 @@ function render() {
   const workflow = selectedWorkflow();
   if (!workflow) return;
   const status = selectedStatus();
+  const hadithFinal = state.statuses["hadith-book-wise-final"] || { state: "idle", logs: [] };
+  const hadithUpdated = state.statuses["hadith-updated-content"] || { state: "idle", logs: [] };
   const quranUpdate = state.statuses["quran-update-json"] || { state: "idle", logs: [] };
   const duaUpdate = state.statuses["dua-update-json"] || { state: "idle", logs: [] };
 
@@ -92,10 +138,9 @@ function render() {
   dryRunRow.style.display = workflow.supports_dry_run ? "flex" : "none";
   runButton.disabled = status.state === "running";
   runButton.textContent = status.state === "running" ? "Running..." : `Run ${workflow.name}`;
-  inputPaths.innerHTML = workflow.input_paths.map(renderPathItem).join("");
-  outputPaths.innerHTML = (status.outputs || workflow.output_paths.map((path) => ({ path, exists: false }))).map(renderPathItem).join("");
   logOutput.textContent = status.logs && status.logs.length ? status.logs.join("\n") : "No run started yet.";
   exitCode.textContent = status.exit_code === null || status.exit_code === undefined ? "" : `Exit code: ${status.exit_code}`;
+  renderHadithPanels(workflow, hadithFinal, hadithUpdated);
   renderQuranJsonPanel(workflow, quranUpdate);
   renderDuaJsonPanel(workflow, duaUpdate);
 
@@ -105,6 +150,57 @@ function render() {
       render();
     });
   });
+}
+
+function renderHadithPanels(workflow, hadithFinal, hadithUpdated) {
+  const visible = workflow.id === "hadith";
+  hadithFinalPanel.classList.toggle("visible", visible);
+  hadithUpdatedPanel.classList.toggle("visible", visible);
+  if (!visible) return;
+
+  hadithFinalStatus.textContent = labelForState(hadithFinal.state);
+  hadithFinalStatus.className = `status-pill ${hadithFinal.state}`;
+  hadithReconciledFiles.innerHTML = state.hadithReconciledFiles.length
+    ? state.hadithReconciledFiles.map((fileName) => renderFileOption(fileName, "hadith-reconciled-file-checkbox", state.selectedHadithReconciledFiles)).join("")
+    : "<p>No .xlsx files found in SINGLE HADITH CONTENT\\reconciled_output.</p>";
+
+  document.querySelectorAll(".hadith-reconciled-file-checkbox").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      updateSelection(state.selectedHadithReconciledFiles, checkbox);
+      render();
+    });
+  });
+
+  const finalCount = state.selectedHadithReconciledFiles.size;
+  buildHadithFinalButton.disabled = hadithFinal.state === "running" || finalCount === 0;
+  buildHadithFinalButton.textContent = hadithFinal.state === "running"
+    ? "Parsing..."
+    : `Parse ${finalCount} selected`;
+  hadithFinalLog.textContent = hadithFinal.logs && hadithFinal.logs.length
+    ? hadithFinal.logs.join("\n")
+    : "No book-wise final parse started yet.";
+
+  hadithUpdatedStatus.textContent = labelForState(hadithUpdated.state);
+  hadithUpdatedStatus.className = `status-pill ${hadithUpdated.state}`;
+  hadithBookWiseFinalFiles.innerHTML = state.hadithBookWiseFinalFiles.length
+    ? state.hadithBookWiseFinalFiles.map((fileName) => renderFileOption(fileName, "hadith-final-file-checkbox", state.selectedHadithBookWiseFinalFiles)).join("")
+    : "<p>No .xlsx files found in SINGLE HADITH CONTENT\\BOOK WISE FINAL.</p>";
+
+  document.querySelectorAll(".hadith-final-file-checkbox").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      updateSelection(state.selectedHadithBookWiseFinalFiles, checkbox);
+      render();
+    });
+  });
+
+  const updatedCount = state.selectedHadithBookWiseFinalFiles.size;
+  updateHadithContentButton.disabled = hadithUpdated.state === "running" || updatedCount === 0;
+  updateHadithContentButton.textContent = hadithUpdated.state === "running"
+    ? "Updating..."
+    : `Update ${updatedCount} selected`;
+  hadithUpdatedLog.textContent = hadithUpdated.logs && hadithUpdated.logs.length
+    ? hadithUpdated.logs.join("\n")
+    : "No updated-content parse started yet.";
 }
 
 function renderDuaJsonPanel(workflow, duaUpdate) {
@@ -172,31 +268,29 @@ function renderQuranJsonPanel(workflow, quranUpdate) {
 }
 
 function renderQuranFileOption(fileName) {
-  const checked = state.selectedQuranFiles.has(fileName) ? "checked" : "";
-  return `
-    <label class="file-option">
-      <input class="quran-file-checkbox" type="checkbox" value="${escapeHtml(fileName)}" ${checked}>
-      <span>${escapeHtml(fileName)}</span>
-    </label>
-  `;
+  return renderFileOption(fileName, "quran-file-checkbox", state.selectedQuranFiles);
 }
 
 function renderDuaFileOption(fileName) {
-  const checked = state.selectedDuaFiles.has(fileName) ? "checked" : "";
+  return renderFileOption(fileName, "dua-file-checkbox", state.selectedDuaFiles);
+}
+
+function renderFileOption(fileName, className, selectedSet) {
+  const checked = selectedSet.has(fileName) ? "checked" : "";
   return `
     <label class="file-option">
-      <input class="dua-file-checkbox" type="checkbox" value="${escapeHtml(fileName)}" ${checked}>
+      <input class="${className}" type="checkbox" value="${escapeHtml(fileName)}" ${checked}>
       <span>${escapeHtml(fileName)}</span>
     </label>
   `;
 }
 
-function renderPathItem(item) {
-  const path = typeof item === "string" ? item : item.path;
-  const exists = typeof item === "string" ? null : item.exists;
-  const stateClass = exists === null ? "" : exists ? "exists" : "missing";
-  const className = `path-item ${stateClass}`.trim();
-  return `<li class="${className}">${escapeHtml(path)}</li>`;
+function updateSelection(selectedSet, checkbox) {
+  if (checkbox.checked) {
+    selectedSet.add(checkbox.value);
+  } else {
+    selectedSet.delete(checkbox.value);
+  }
 }
 
 function escapeHtml(value) {
@@ -232,6 +326,34 @@ async function startWorkflow() {
       render();
     }, 1500);
   }
+  if (workflow.id === "hadith") {
+    setTimeout(async () => {
+      await loadHadithFiles();
+      render();
+    }, 1500);
+  }
+  render();
+}
+
+async function startHadithBookWiseFinal() {
+  const files = Array.from(state.selectedHadithReconciledFiles);
+  const status = await fetchJson("/api/start/hadith-book-wise-final", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ files }),
+  });
+  state.statuses["hadith-book-wise-final"] = status;
+  render();
+}
+
+async function startHadithUpdatedContent() {
+  const files = Array.from(state.selectedHadithBookWiseFinalFiles);
+  const status = await fetchJson("/api/start/hadith-updated-content", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ files }),
+  });
+  state.statuses["hadith-updated-content"] = status;
   render();
 }
 
@@ -272,6 +394,13 @@ async function refreshSelectedStatus() {
   if (state.selectedId === "quran") {
     state.statuses["quran-update-json"] = await fetchJson("/api/status/quran-update-json");
   }
+  if (state.selectedId === "hadith") {
+    state.statuses["hadith-book-wise-final"] = await fetchJson("/api/status/hadith-book-wise-final");
+    state.statuses["hadith-updated-content"] = await fetchJson("/api/status/hadith-updated-content");
+    if (state.statuses["hadith-book-wise-final"].state !== "running") {
+      await loadHadithFiles();
+    }
+  }
   if (state.selectedId === "dua") {
     state.statuses["dua-update-json"] = await fetchJson("/api/status/dua-update-json");
     if (state.statuses.dua && state.statuses.dua.state !== "running") {
@@ -299,6 +428,18 @@ selectAllDuaFiles.addEventListener("click", () => {
   render();
 });
 
+selectAllHadithReconciledFiles.addEventListener("click", () => {
+  const allSelected = state.selectedHadithReconciledFiles.size === state.hadithReconciledFiles.length;
+  state.selectedHadithReconciledFiles = allSelected ? new Set() : new Set(state.hadithReconciledFiles);
+  render();
+});
+
+selectAllHadithBookWiseFinalFiles.addEventListener("click", () => {
+  const allSelected = state.selectedHadithBookWiseFinalFiles.size === state.hadithBookWiseFinalFiles.length;
+  state.selectedHadithBookWiseFinalFiles = allSelected ? new Set() : new Set(state.hadithBookWiseFinalFiles);
+  render();
+});
+
 updateQuranJsonButton.addEventListener("click", () => {
   startQuranJsonUpdate().catch((error) => {
     quranUpdateLog.textContent = error.message;
@@ -308,6 +449,18 @@ updateQuranJsonButton.addEventListener("click", () => {
 updateDuaJsonButton.addEventListener("click", () => {
   startDuaJsonUpdate().catch((error) => {
     duaUpdateLog.textContent = error.message;
+  });
+});
+
+buildHadithFinalButton.addEventListener("click", () => {
+  startHadithBookWiseFinal().catch((error) => {
+    hadithFinalLog.textContent = error.message;
+  });
+});
+
+updateHadithContentButton.addEventListener("click", () => {
+  startHadithUpdatedContent().catch((error) => {
+    hadithUpdatedLog.textContent = error.message;
   });
 });
 

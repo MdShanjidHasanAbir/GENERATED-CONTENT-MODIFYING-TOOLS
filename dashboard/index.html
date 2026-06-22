@@ -38,20 +38,54 @@
             </label>
             <button class="run-button" id="runButton" type="button">Run workflow</button>
           </div>
+        </section>
 
-          <div class="panel paths-panel">
-            <h3>Folders</h3>
-            <div class="path-groups">
-              <div>
-                <h4>Inputs</h4>
-                <ul id="inputPaths"></ul>
-              </div>
-              <div>
-                <h4>Outputs</h4>
-                <ul id="outputPaths"></ul>
-              </div>
+        <section class="panel quran-json-panel" id="hadithFinalPanel">
+          <div class="quran-json-header">
+            <div>
+              <h3>Parse Reconciled Output</h3>
+              <p>Write selected reconciled_output workbooks to BOOK WISE FINAL.</p>
             </div>
+            <div class="status-pill" id="hadithFinalStatus">Idle</div>
           </div>
+
+          <div class="json-update-grid dua-update-grid">
+            <div class="file-picker">
+              <div class="file-picker-header">
+                <h4>Reconciled files</h4>
+                <button class="text-button" id="selectAllHadithReconciledFiles" type="button">Select all</button>
+              </div>
+              <div class="file-list" id="hadithReconciledFiles"></div>
+            </div>
+
+            <button class="run-button" id="buildHadithFinalButton" type="button">Parse selected</button>
+          </div>
+
+          <pre class="update-log" id="hadithFinalLog">No book-wise final parse started yet.</pre>
+        </section>
+
+        <section class="panel quran-json-panel" id="hadithUpdatedPanel">
+          <div class="quran-json-header">
+            <div>
+              <h3>Update Book Wise Content</h3>
+              <p>Write selected BOOK WISE FINAL workbooks to BOOK WISE FINAL UPDATED CONTENT.</p>
+            </div>
+            <div class="status-pill" id="hadithUpdatedStatus">Idle</div>
+          </div>
+
+          <div class="json-update-grid dua-update-grid">
+            <div class="file-picker">
+              <div class="file-picker-header">
+                <h4>Book wise final files</h4>
+                <button class="text-button" id="selectAllHadithBookWiseFinalFiles" type="button">Select all</button>
+              </div>
+              <div class="file-list" id="hadithBookWiseFinalFiles"></div>
+            </div>
+
+            <button class="run-button" id="updateHadithContentButton" type="button">Update selected</button>
+          </div>
+
+          <pre class="update-log" id="hadithUpdatedLog">No updated-content parse started yet.</pre>
         </section>
 
         <section class="panel quran-json-panel" id="quranJsonPanel">
