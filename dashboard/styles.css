@@ -319,7 +319,28 @@ h4 {
 .quran-json-panel.visible {
   display: grid;
   min-width: 0;
-  gap: 20px;
+  gap: 24px;
+  grid-template-columns: minmax(420px, 0.9fr) minmax(520px, 1.1fr);
+  grid-template-areas:
+    "header header"
+    "controls log";
+  align-items: stretch;
+}
+
+.quran-json-panel > .quran-json-header {
+  grid-area: header;
+}
+
+.quran-json-panel > .json-update-grid {
+  grid-area: controls;
+  align-self: start;
+}
+
+.quran-json-panel > .update-log {
+  grid-area: log;
+  height: 100%;
+  min-height: 260px;
+  max-height: 380px;
 }
 
 .quran-json-header {
@@ -343,17 +364,23 @@ h4 {
 
 .json-update-grid {
   display: grid;
-  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(220px, 260px);
-  gap: 20px;
-  align-items: end;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
 }
 
 .json-update-grid > * {
   min-width: 0;
 }
 
+.json-update-grid .run-button {
+  justify-self: end;
+  max-width: 280px;
+  margin-top: 2px;
+}
+
 .dua-update-grid {
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 260px);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .field-label {
@@ -362,6 +389,28 @@ h4 {
   color: var(--ink-strong);
   font-size: 1rem;
   font-weight: 800;
+}
+
+.field-label input[type="file"] {
+  width: 100%;
+  min-height: 52px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 12px;
+  background: var(--panel-subtle);
+  color: var(--ink);
+}
+
+.field-label input[type="file"]::file-selector-button {
+  min-height: 34px;
+  margin-right: 12px;
+  border: 0;
+  border-radius: 7px;
+  padding: 0 13px;
+  background: white;
+  color: var(--ink-strong);
+  font-weight: 800;
+  cursor: pointer;
 }
 
 select {
@@ -404,7 +453,8 @@ select:focus {
 
 .file-list {
   min-width: 0;
-  max-height: 230px;
+  min-height: 230px;
+  max-height: 270px;
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -554,6 +604,19 @@ pre {
   .json-update-grid,
   .dua-update-grid {
     grid-template-columns: 1fr;
+  }
+
+  .quran-json-panel.visible {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "header"
+      "controls"
+      "log";
+  }
+
+  .json-update-grid .run-button {
+    justify-self: stretch;
+    max-width: none;
   }
 }
 

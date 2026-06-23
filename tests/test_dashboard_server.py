@@ -359,3 +359,24 @@ class DashboardUiTest(unittest.TestCase):
         ):
             self.assertIn(label, html)
         self.assertRegex(css, r"html\s*\{\s*font-size:\s*18px;")
+
+    def test_action_logs_are_side_by_side_without_main_execution_log(self):
+        dashboard_dir = Path(__file__).resolve().parents[1] / "dashboard"
+        html = (dashboard_dir / "index.html").read_text(encoding="utf-8")
+        css = (dashboard_dir / "styles.css").read_text(encoding="utf-8")
+
+        self.assertIn('class="update-log" id="hadithUploadLog"', html)
+        self.assertIn('id="logOutput"', html)
+        self.assertNotIn('class="update-log" id="logOutput"', html)
+        self.assertRegex(css, r"\.quran-json-panel\.visible\s*\{[^}]*grid-template-areas:")
+        self.assertRegex(css, r"\.quran-json-panel\s*>\s*\.update-log\s*\{[^}]*grid-area:\s*log;")
+        self.assertNotRegex(css, r"\.log-panel\s*>\s*pre\s*\{[^}]*grid-area:\s*log;")
+
+    def test_action_controls_stack_inputs_and_place_primary_button_near_files(self):
+        css = (Path(__file__).resolve().parents[1] / "dashboard" / "styles.css").read_text(encoding="utf-8")
+
+        self.assertRegex(css, r"\.json-update-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);")
+        self.assertRegex(css, r"\.json-update-grid\s+\.run-button\s*\{[^}]*justify-self:\s*end;")
+        self.assertRegex(css, r"\.json-update-grid\s+\.run-button\s*\{[^}]*max-width:\s*280px;")
+        self.assertRegex(css, r"\.field-label\s+input\[type=\"file\"\]\s*\{[^}]*min-height:\s*52px;")
+        self.assertRegex(css, r"\.quran-json-panel\s*>\s*\.update-log\s*\{[^}]*min-height:\s*260px;")
