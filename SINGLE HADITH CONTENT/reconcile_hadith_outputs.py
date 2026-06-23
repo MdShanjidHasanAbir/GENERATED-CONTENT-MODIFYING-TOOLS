@@ -70,6 +70,59 @@ RELATED_BOOK_LABELS = {
     "TARGIB WATTAHRIB": "Targib Wattahrib",
     "LULUWAL MARJAN": "Luluwal Marjan",
 }
+RELATED_BOOK_LABELS_BY_LANGUAGE = {
+    "bn": {
+        "BUKHARI": "সহীহ বুখারী",
+        "MUSLIM": "সহীহ মুসলিম",
+        "NASAI": "সুনান আন-নাসায়ী",
+        "DAWUD": "সুনান আবু দাউদ",
+        "TIRMIDHI": "জামে আত-তিরমিজি",
+        "MAJAH": "সুনান ইবনে মাজাহ",
+        "MUWATTA MALIK": "মুয়াত্তা মালিক",
+        "RIYADUS SALIHIN": "রিয়াদুস সালেহীন",
+        "BULUGUL MARAM": "বুলুগুল মারাম",
+        "LULUWAL MARJAN": "লুলুওয়াল মারজান",
+        "HADIS SOMVAR": "হাদিস সম্ভার",
+        "SILSILA SAHIHA": "সিলসিলা সহীহা",
+        "DHAIF HADIS SIRIJ": "যঈফ হাদিস সিরিজ",
+        "MISHKATUL MASABIH": "মিশকাতুল মাসাবীহ",
+        "40 HADITH": "৪০ হাদিস",
+        "ADABUL MUFRAD": "আদাবুল মুফরাদ",
+        "JUJUL RAFAYEL YADAIN": "জুযউ রাফঈল ইয়াদাইন",
+        "SAHIH HADISE QUDSI": "সহীহ হাদীসে কুদসী",
+        "100 HADITH": "১০০ হাদিস",
+        "MISKATE DHAIF HADIS": "মিশকাতে যঈফ হাদিস",
+        "SHAMAYELE TIRMIDHI": "শামায়েলে তিরমিজি",
+        "TARGIB WATTAHRIB": "তারগিব ওয়াত তাহরিব",
+        "FAZAYELE AMAL": "ফাযায়েলে আমল",
+        "UPODESH": "উপদেশ",
+        "RAMADANER DURBOL HADIS": "রমজানের দুর্বল হাদিস",
+    },
+    "ur": {
+        "BUKHARI": "صحیح بخاری",
+        "MUSLIM": "صحیح مسلم",
+        "NASAI": "سنن نسائی",
+        "DAWUD": "سنن ابو داؤد",
+        "TIRMIDHI": "جامع ترمذی",
+        "MAJAH": "سنن ابن ماجہ",
+    },
+    "id": {
+        "BUKHARI": "Sahih Bukhari",
+        "MUSLIM": "Sahih Muslim",
+        "NASAI": "Sunan an-Nasai",
+        "DAWUD": "Sunan Abu Dawud",
+        "TIRMIDHI": "Jami at-Tirmidhi",
+        "MAJAH": "Sunan Ibn Majah",
+    },
+}
+RELATED_BOOK_SLUGS = {
+    "BUKHARI": "bukhari",
+    "MUSLIM": "muslim",
+    "MAJAH": "majah",
+    "DAWUD": "dawud",
+    "TIRMIDHI": "tirmidhi",
+    "NASAI": "nasai",
+}
 RELATED_BOOK_ALIASES = {
     "BUKHARI": (
         "bukhari",
@@ -134,6 +187,7 @@ RELATED_BOOK_ALIASES = {
     ),
     "TIRMIDHI": (
         "tirmidhi",
+        "tirmidsi",
         "tirmizi",
         "jami at tirmidhi",
         "jami at-tirmidhi",
@@ -1117,17 +1171,24 @@ def _normalize_related_hadith_object(
     hadith_id = normalize_id(item.get("id"))
     book_id = normalize_id(item.get("book_id"))
     label = normalize_text(item.get("label"))
-    if not book_id and label:
+    collection = None
+    if label:
         collection = _related_collection_from_text(
             _normalize_related_reference_text(label),
             related_book_aliases=related_book_aliases,
         )
         if collection:
-            book_id = related_book_ids.get((language_id, collection)) or related_book_ids.get(("", collection))
-            label = _related_book_label(collection)
-    if not (hadith_id and book_id and label):
+            if not book_id:
+                book_id = related_book_ids.get((language_id, collection)) or related_book_ids.get(("", collection))
+            label = _related_book_label(collection, language_id)
+    slug = (
+        _related_book_slug(collection)
+        if collection
+        else _normalize_related_slug(item.get("slug")) or _slug_from_text(label) or (f"book-{book_id}" if book_id else "")
+    )
+    if not (hadith_id and book_id and slug and label):
         return None
-    return {"id": hadith_id, "book_id": book_id, "label": label}
+    return {"id": hadith_id, "book_id": book_id, "slug": slug, "label": label}
 
 
 def _normalize_related_hadith_text(
@@ -1155,7 +1216,8 @@ def _normalize_related_hadith_text(
     return {
         "id": normalize_id(hadith_match.group(0)),
         "book_id": book_id,
-        "label": _related_book_label(collection),
+        "slug": _related_book_slug(collection),
+        "label": _related_book_label(collection, language_id),
     }, None
 
 
@@ -1209,8 +1271,42 @@ def _related_collection_aliases(
     return tuple(normalized_aliases)
 
 
-def _related_book_label(collection: str) -> str:
+def _related_book_label(collection: str, language_id: str | None = None) -> str:
+    language_id = (language_id or "").lower()
+    localized_labels = RELATED_BOOK_LABELS_BY_LANGUAGE.get(language_id, {})
+    if collection in localized_labels:
+        return localized_labels[collection]
+    script_label = _related_book_label_from_alias_script(collection, language_id)
+    if script_label:
+        return script_label
     return RELATED_BOOK_LABELS.get(collection, collection.title())
+
+
+def _related_book_label_from_alias_script(collection: str, language_id: str) -> str:
+    if language_id == "bn":
+        pattern = BENGALI_RE
+    elif language_id == "ur":
+        pattern = URDU_PERSIAN_RE
+    else:
+        return ""
+    for alias in RELATED_BOOK_ALIASES.get(collection, ()):
+        if pattern.search(alias):
+            return alias
+    return ""
+
+
+def _related_book_slug(collection: str) -> str:
+    return RELATED_BOOK_SLUGS.get(collection, _slug_from_text(collection))
+
+
+def _normalize_related_slug(value) -> str:
+    return _slug_from_text(normalize_text(value))
+
+
+def _slug_from_text(value: str) -> str:
+    text = unicodedata.normalize("NFKC", str(value)).translate(DIGIT_TRANSLATION).casefold()
+    text = re.sub(r"[^a-z0-9]+", "-", text)
+    return text.strip("-")
 
 
 def _normalize_related_reference_text(value: str) -> str:
