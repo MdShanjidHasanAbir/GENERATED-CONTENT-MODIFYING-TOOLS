@@ -185,6 +185,7 @@ class ConvertQuranContentTest(unittest.TestCase):
             self.assertEqual(rows[0], ("juz_id", "language_id", "contents"))
             self.assertEqual(converted["heading"], {"title": "Al Quran Juz 1", "description": "Juz summary"})
             self.assertEqual(converted["searching_terms"], ["term one", "term two"])
+            self._assert_formatted_sheet(updated_path, expected_columns=3)
 
     def test_update_output_files_reports_missing_selected_file(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -197,6 +198,19 @@ class ConvertQuranContentTest(unittest.TestCase):
                 quran.update_quran_output_files(output_dir, updated_dir, "surah.json", ["missing.xlsx"])
 
             self.assertIn("missing.xlsx", str(context.exception))
+
+    def test_existing_updated_workbook_can_be_formatted_in_place(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "plain.xlsx"
+            self._write_converted_output_workbook(
+                path,
+                headers=["juz_id", "language_id", "contents"],
+                rows=[["1", "en", "content"]],
+            )
+
+            quran.apply_output_workbook_format(path)
+
+            self._assert_formatted_sheet(path, expected_columns=3)
 
     def _write_source_workbook(self, path, rows):
         workbook = Workbook()
@@ -221,6 +235,26 @@ class ConvertQuranContentTest(unittest.TestCase):
         try:
             sheet = workbook[sheet_name]
             return [tuple(row) for row in sheet.iter_rows(values_only=True)]
+        finally:
+            workbook.close()
+
+    def _assert_formatted_sheet(self, path, sheet_name="Results", expected_columns=3):
+        workbook = load_workbook(path)
+        try:
+            sheet = workbook[sheet_name]
+            self.assertEqual(sheet["A1"].font.sz, 14)
+            self.assertTrue(sheet["A1"].font.bold)
+            self.assertEqual(sheet["A1"].fill.fgColor.rgb, "00FCE4D6")
+            self.assertEqual(sheet["A1"].alignment.vertical, "center")
+            self.assertFalse(sheet["A1"].alignment.wrap_text)
+            self.assertEqual(sheet["A2"].font.sz, 14)
+            self.assertEqual(sheet["A2"].alignment.vertical, "center")
+            self.assertFalse(sheet["A2"].alignment.wrap_text)
+            self.assertEqual(sheet.row_dimensions[1].height, 46)
+            self.assertEqual(sheet.row_dimensions[2].height, 46)
+            for index in range(1, expected_columns + 1):
+                column_letter = sheet.cell(row=1, column=index).column_letter
+                self.assertEqual(sheet.column_dimensions[column_letter].width, 25)
         finally:
             workbook.close()
 

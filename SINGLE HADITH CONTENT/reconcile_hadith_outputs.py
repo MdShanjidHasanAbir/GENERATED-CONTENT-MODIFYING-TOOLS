@@ -12,9 +12,20 @@ from pathlib import Path
 from typing import Iterable
 
 from openpyxl import Workbook, load_workbook
+from openpyxl.cell import WriteOnlyCell
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
 
 
 LANGUAGE_IDS = ("EN", "BN", "UR", "ID")
+SHEET_DATA_FONT_SIZE = 14
+SHEET_ROW_HEIGHT = 46
+SHEET_COLUMN_WIDTH = 25
+HEADER_FILL_COLOR = "FCE4D6"
+DATA_FONT = Font(size=SHEET_DATA_FONT_SIZE)
+HEADER_FONT = Font(size=SHEET_DATA_FONT_SIZE, bold=True)
+HEADER_FILL = PatternFill(fill_type="solid", fgColor=HEADER_FILL_COLOR)
+CELL_ALIGNMENT = Alignment(vertical="center", wrap_text=False)
 COLLECTION_TOKENS = ("BUKHARI", "DAWUD", "MAJAH", "MUSLIM", "NASAI", "TIRMIDHI")
 BOOK_ALIASES = {
     "BUKHARI": ("BUKHARI",),
@@ -790,12 +801,18 @@ def write_book_wise_final(
         rows.sort(key=_final_row_sort_key)
         workbook = Workbook(write_only=True)
         sheet = workbook.create_sheet(title="final")
-        sheet.append(["book_id", "language_id", "hadith_id", "content"])
+        header = ["book_id", "language_id", "hadith_id", "content"]
+        _format_output_sheet_columns(sheet, len(header))
+        row_number = 1
+        _append_formatted_row(sheet, header, row_number, is_header=True)
+        row_number += 1
         for row in rows:
-            sheet.append(row)
+            _append_formatted_row(sheet, row, row_number)
+            row_number += 1
         output_name = f"{language}_{_safe_filename(book_name)}.xlsx"
         output_path = final_dir / language / output_name
         workbook.save(output_path)
+        apply_output_workbook_format(output_path)
         row_counts[f"{language}_{_safe_filename(book_name)}"] = len(rows)
 
     return row_counts
@@ -933,7 +950,10 @@ def _write_updated_content_workbook(
             if content_index is not None and error_index is None:
                 output_header.append("content_error_details")
                 error_index = len(output_header) - 1
-            output_sheet.append(output_header)
+            _format_output_sheet_columns(output_sheet, len(output_header))
+            row_number = 1
+            _append_formatted_row(output_sheet, output_header, row_number, is_header=True)
+            row_number += 1
             for row in rows:
                 output_row = list(row)
                 if content_index is not None and content_index < len(output_row) and output_row[content_index]:
@@ -950,8 +970,10 @@ def _write_updated_content_workbook(
                             output_row.append(None)
                         output_row[error_index] = error_details or None
                     converted_rows += 1
-                output_sheet.append(output_row)
+                _append_formatted_row(output_sheet, output_row, row_number)
+                row_number += 1
         output_workbook.save(output_path)
+        apply_output_workbook_format(output_path)
     finally:
         workbook.close()
     return converted_rows
@@ -1529,6 +1551,48 @@ def _header_map(header) -> dict[str, int]:
 
 def _cell(row, index: int):
     return row[index] if index < len(row) else None
+
+
+def apply_output_workbook_format(path: Path | str) -> None:
+    workbook = load_workbook(path)
+    try:
+        for sheet in workbook.worksheets:
+            _format_existing_sheet(sheet)
+        workbook.save(path)
+    finally:
+        workbook.close()
+
+
+def _format_existing_sheet(sheet) -> None:
+    for column_index in range(1, sheet.max_column + 1):
+        sheet.column_dimensions[get_column_letter(column_index)].width = SHEET_COLUMN_WIDTH
+    for row_index in range(1, sheet.max_row + 1):
+        sheet.row_dimensions[row_index].height = SHEET_ROW_HEIGHT
+    for row in sheet.iter_rows():
+        for cell in row:
+            cell.font = HEADER_FONT if cell.row == 1 else DATA_FONT
+            cell.alignment = CELL_ALIGNMENT
+            if cell.row == 1:
+                cell.fill = HEADER_FILL
+
+
+def _format_output_sheet_columns(sheet, column_count: int) -> None:
+    for column_index in range(1, column_count + 1):
+        sheet.column_dimensions[get_column_letter(column_index)].width = SHEET_COLUMN_WIDTH
+
+
+def _append_formatted_row(sheet, values, row_number: int, is_header: bool = False) -> None:
+    sheet.row_dimensions[row_number].height = SHEET_ROW_HEIGHT
+    font = HEADER_FONT if is_header else DATA_FONT
+    row = []
+    for value in values:
+        cell = WriteOnlyCell(sheet, value=value)
+        cell.font = font
+        cell.alignment = CELL_ALIGNMENT
+        if is_header:
+            cell.fill = HEADER_FILL
+        row.append(cell)
+    sheet.append(row)
 
 
 def _success_is_no(row, columns: dict[str, int]) -> bool:

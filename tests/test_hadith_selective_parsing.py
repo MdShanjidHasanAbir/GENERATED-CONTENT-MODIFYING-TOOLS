@@ -181,6 +181,7 @@ class HadithSelectiveParsingTest(unittest.TestCase):
                     ("101", "en", "1", "{\"heading\":\"bukhari\"}"),
                 ],
             )
+            assert_formatted_sheet(self, final_dir / "EN" / "EN_BUKHARI.xlsx", expected_columns=4)
             self.assertEqual(
                 read_rows(final_dir / "EN" / "EN_MUSLIM.xlsx"),
                 [
@@ -224,6 +225,7 @@ class HadithSelectiveParsingTest(unittest.TestCase):
             converted = json.loads(rows[1][3])
             self.assertEqual(converted["heading"]["description"], "plain content")
             self.assertEqual(rows[0], ("book_id", "language_id", "hadith_id", "content", "content_error_details"))
+            assert_formatted_sheet(self, updated_dir / "EN" / "EN_BUKHARI.xlsx", expected_columns=5)
             self.assertEqual(
                 read_rows(updated_dir / "EN" / "EN_MUSLIM.xlsx"),
                 [
@@ -231,6 +233,40 @@ class HadithSelectiveParsingTest(unittest.TestCase):
                     ("existing", "en", "existing", "keep me"),
                 ],
             )
+
+    def test_existing_output_workbook_can_be_formatted_in_place(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "plain.xlsx"
+            write_workbook(
+                path,
+                ["book_id", "language_id", "hadith_id", "content"],
+                [["1", "en", "10", "content"]],
+            )
+
+            hadith.apply_output_workbook_format(path)
+
+            assert_formatted_sheet(self, path, expected_columns=4)
+
+
+def assert_formatted_sheet(test_case: unittest.TestCase, path: Path, expected_columns: int) -> None:
+    workbook = load_workbook(path)
+    try:
+        sheet = workbook.active
+        test_case.assertEqual(sheet["A1"].font.sz, 14)
+        test_case.assertTrue(sheet["A1"].font.bold)
+        test_case.assertEqual(sheet["A1"].fill.fgColor.rgb, "00FCE4D6")
+        test_case.assertEqual(sheet["A1"].alignment.vertical, "center")
+        test_case.assertFalse(sheet["A1"].alignment.wrap_text)
+        test_case.assertEqual(sheet["A2"].font.sz, 14)
+        test_case.assertEqual(sheet["A2"].alignment.vertical, "center")
+        test_case.assertFalse(sheet["A2"].alignment.wrap_text)
+        test_case.assertEqual(sheet.row_dimensions[1].height, 46)
+        test_case.assertEqual(sheet.row_dimensions[2].height, 46)
+        for index in range(1, expected_columns + 1):
+            column_letter = sheet.cell(row=1, column=index).column_letter
+            test_case.assertEqual(sheet.column_dimensions[column_letter].width, 25)
+    finally:
+        workbook.close()
 
 
 if __name__ == "__main__":
