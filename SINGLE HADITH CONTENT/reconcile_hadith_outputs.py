@@ -441,7 +441,13 @@ def reconcile_folders(
         write_missing_input_workbooks(input_dir, missing_input_dir, missing_ids)
         if books_path.exists():
             write_book_wise_final(cleaned_dir, books_path, final_dir, books)
-            write_updated_content_workbooks(final_dir, updated_content_dir)
+            write_updated_content_workbooks(
+                final_dir,
+                updated_content_dir,
+                books_path,
+                input_dir=input_dir,
+                missing_input_dir=missing_input_dir,
+            )
 
     return summaries
 
@@ -708,13 +714,23 @@ def write_missing_id_reports(
 
 
 def write_missing_input_workbooks(input_dir: Path, missing_input_dir: Path, missing_ids: Iterable[MissingId]) -> None:
+    _write_missing_input_workbooks(input_dir, missing_input_dir, missing_ids, clear_existing=True)
+
+
+def _write_missing_input_workbooks(
+    input_dir: Path,
+    missing_input_dir: Path,
+    missing_ids: Iterable[MissingId],
+    clear_existing: bool,
+) -> None:
     missing_by_input: dict[str, set[str]] = {}
     for item in missing_ids:
         missing_by_input.setdefault(item.input_file, set()).add(item.missing_id)
 
     missing_input_dir.mkdir(parents=True, exist_ok=True)
-    for old_file in missing_input_dir.glob("*.xlsx"):
-        old_file.unlink()
+    if clear_existing:
+        for old_file in missing_input_dir.glob("*.xlsx"):
+            old_file.unlink()
 
     if not missing_by_input:
         return
@@ -722,7 +738,16 @@ def write_missing_input_workbooks(input_dir: Path, missing_input_dir: Path, miss
     for input_file, ids in missing_by_input.items():
         input_path = Path(input_file)
         rows = load_input_rows_by_id(input_path)
-        output_rows = [rows[hadith_id] for hadith_id in rows if hadith_id in ids]
+        output_path = missing_input_dir / f"{input_path.stem}_missing.xlsx"
+        existing_rows = load_input_rows_by_id(output_path) if not clear_existing and output_path.exists() else {}
+        ordered_ids = []
+        for hadith_id in existing_rows:
+            if hadith_id not in ordered_ids:
+                ordered_ids.append(hadith_id)
+        for hadith_id in rows:
+            if hadith_id in ids and hadith_id not in ordered_ids:
+                ordered_ids.append(hadith_id)
+        output_rows = [rows.get(hadith_id) or existing_rows[hadith_id] for hadith_id in ordered_ids]
         if not output_rows:
             continue
 
@@ -733,8 +758,7 @@ def write_missing_input_workbooks(input_dir: Path, missing_input_dir: Path, miss
         for row in output_rows:
             sheet.append([row.id, row.arabic, row.translation])
 
-        output_name = f"{input_path.stem}_missing.xlsx"
-        workbook.save(missing_input_dir / output_name)
+        workbook.save(output_path)
 
 
 def load_input_rows_by_id(input_path: Path) -> dict[str, HadithTriple]:
@@ -920,11 +944,16 @@ def write_updated_content_workbooks(
     related_book_aliases: dict[str, tuple[str, ...]] | None = None,
     source_paths: Iterable[Path | str] | None = None,
     clear_existing: bool = True,
+    input_dir: Path | str | None = None,
+    missing_input_dir: Path | str | None = None,
 ) -> dict[str, int]:
     final_dir = Path(final_dir)
     updated_dir = Path(updated_dir)
     books_path = Path(books_path)
+    input_dir = Path(input_dir) if input_dir is not None else None
+    missing_input_dir = Path(missing_input_dir) if missing_input_dir is not None else None
     final_root = final_dir.resolve()
+    books = None
     if related_book_ids is None or related_book_aliases is None:
         if books_path.exists():
             books = load_books_catalog(books_path)
@@ -937,6 +966,8 @@ def write_updated_content_workbooks(
                 related_book_ids = {}
             if related_book_aliases is None:
                 related_book_aliases = {}
+    if books is None and input_dir is not None and missing_input_dir is not None and books_path.exists():
+        books = load_books_catalog(books_path)
     updated_dir.mkdir(parents=True, exist_ok=True)
     if clear_existing:
         for old_file in updated_dir.rglob("*.xlsx"):
@@ -945,16 +976,41 @@ def write_updated_content_workbooks(
         (updated_dir / language).mkdir(parents=True, exist_ok=True)
 
     row_counts: dict[str, int] = {}
-    for source_path in _source_workbook_paths(final_dir, source_paths):
+    source_workbook_paths = _source_workbook_paths(final_dir, source_paths)
+    input_pairs_by_source: dict[Path, WorkbookPair] = {}
+    if input_dir is not None and missing_input_dir is not None and books is not None:
+        input_pairs_by_source = {
+            pair.target_path.resolve(): pair
+            for pair in pair_workbooks(discover_workbooks(input_dir), source_workbook_paths, books)
+        }
+    skipped_missing_ids: list[MissingId] = []
+
+    for source_path in source_workbook_paths:
         relative_path = source_path.resolve().relative_to(final_root)
         output_path = updated_dir / relative_path
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        row_counts[relative_path.as_posix()] = _write_updated_content_workbook(
+        written_rows, skipped_ids = _write_updated_content_workbook(
             source_path,
             output_path,
             related_book_ids,
             related_book_aliases,
         )
+        row_counts[relative_path.as_posix()] = written_rows
+        pair = input_pairs_by_source.get(source_path.resolve())
+        if pair:
+            skipped_missing_ids.extend(
+                MissingId(
+                    language=pair.language,
+                    collection=pair.collection,
+                    missing_id=hadith_id,
+                    input_file=str(pair.input_path),
+                    cleaned_file=str(output_path),
+                )
+                for hadith_id in skipped_ids
+            )
+
+    if input_dir is not None and missing_input_dir is not None and skipped_missing_ids:
+        _write_missing_input_workbooks(input_dir, missing_input_dir, skipped_missing_ids, clear_existing=False)
 
     return row_counts
 
@@ -985,10 +1041,11 @@ def _write_updated_content_workbook(
     output_path: Path,
     related_book_ids: dict[tuple[str, str], str],
     related_book_aliases: dict[str, tuple[str, ...]] | None,
-) -> int:
+) -> tuple[int, list[str]]:
     workbook = load_workbook(source_path, read_only=True, data_only=True)
     output_workbook = Workbook(write_only=True)
-    converted_rows = 0
+    written_rows = 0
+    skipped_ids: list[str] = []
     try:
         for sheet in workbook.worksheets:
             output_sheet = output_workbook.create_sheet(title=sheet.title)
@@ -999,6 +1056,7 @@ def _write_updated_content_workbook(
             columns = _header_map(header)
             content_index = columns.get("content")
             language_index = columns.get("language_id")
+            hadith_index = columns.get("hadith_id")
             error_index = columns.get("content_error_details")
             output_header = list(header)
             if content_index is not None and error_index is None:
@@ -1018,19 +1076,26 @@ def _write_updated_content_workbook(
                         related_book_ids=related_book_ids,
                         related_book_aliases=related_book_aliases,
                     )
+                    converted_data = json.loads(converted_content)
+                    if not converted_data.get("related_hadiths"):
+                        if hadith_index is not None:
+                            hadith_id = normalize_id(_cell(output_row, hadith_index))
+                            if hadith_id:
+                                skipped_ids.append(hadith_id)
+                        continue
                     output_row[content_index] = converted_content
                     if error_index is not None:
                         while len(output_row) <= error_index:
                             output_row.append(None)
                         output_row[error_index] = error_details or None
-                    converted_rows += 1
+                    written_rows += 1
                 _append_formatted_row(output_sheet, output_row, row_number)
                 row_number += 1
         output_workbook.save(output_path)
         apply_output_workbook_format(output_path)
     finally:
         workbook.close()
-    return converted_rows
+    return written_rows, skipped_ids
 
 
 def _parse_final_content_json(text: str):
@@ -1445,6 +1510,8 @@ def main(argv: list[str] | None = None) -> int:
     updated_parser.add_argument("--final-dir", type=Path, default=Path("BOOK WISE FINAL"))
     updated_parser.add_argument("--updated-content-dir", type=Path, default=Path("BOOK WISE FINAL UPDATED CONTENT"))
     updated_parser.add_argument("--books-file", type=Path, default=Path("BOOKS.xlsx"))
+    updated_parser.add_argument("--input-dir", type=Path, default=Path("INPUT"))
+    updated_parser.add_argument("--missing-input-dir", type=Path, default=Path("missing_input"))
     updated_parser.add_argument("--files", nargs="*", default=None)
     args = parser.parse_args(argv)
 
@@ -1473,6 +1540,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.books_file,
                 source_paths=args.files,
                 clear_existing=False,
+                input_dir=args.input_dir,
+                missing_input_dir=args.missing_input_dir,
             )
         except (OSError, ValueError) as exc:
             print(f"Failed to update final content workbooks: {exc}", file=sys.stderr)

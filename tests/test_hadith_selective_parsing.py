@@ -242,7 +242,20 @@ class HadithSelectiveParsingTest(unittest.TestCase):
             write_workbook(
                 final_dir / "EN" / "EN_BUKHARI.xlsx",
                 ["book_id", "language_id", "hadith_id", "content"],
-                [["101", "en", "1", "plain content"]],
+                [
+                    [
+                        "101",
+                        "en",
+                        "1",
+                        json.dumps(
+                            {
+                                "heading": {"description": "plain content"},
+                                "related_hadiths": ["Sahih Bukhari 1"],
+                            },
+                            ensure_ascii=False,
+                        ),
+                    ]
+                ],
             )
             write_workbook(
                 updated_dir / "EN" / "EN_MUSLIM.xlsx",
@@ -271,6 +284,65 @@ class HadithSelectiveParsingTest(unittest.TestCase):
                     ("existing", "en", "existing", "keep me"),
                 ],
             )
+
+    def test_updated_content_skips_blank_related_hadiths_and_adds_missing_input(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            books_path = root / "BOOKS.xlsx"
+            input_dir = root / "INPUT"
+            final_dir = root / "BOOK WISE FINAL"
+            updated_dir = root / "BOOK WISE FINAL UPDATED CONTENT"
+            missing_dir = root / "missing_input"
+            write_workbook(
+                books_path,
+                ["id", "language_id", "book_name"],
+                [["1", "bn", "BUKHARI"]],
+            )
+            write_workbook(
+                input_dir / "BN" / "[V1] BUKHARI-BANGLA.xlsx",
+                ["id", "arabic", "translation"],
+                [["1", "আরবি এক", "বাংলা এক"], ["2", "আরবি দুই", "বাংলা দুই"]],
+            )
+            write_workbook(
+                missing_dir / "[V1] BUKHARI-BANGLA_missing.xlsx",
+                ["id", "arabic", "translation"],
+                [["9", "আগের আরবি", "আগের বাংলা"]],
+            )
+            keep_content = json.dumps(
+                {
+                    "heading": "Keep",
+                    "related_hadiths": ["Sahih Bukhari 1"],
+                },
+                ensure_ascii=False,
+            )
+            blank_related_content = json.dumps(
+                {
+                    "heading": "Skip",
+                    "related_hadiths": [],
+                },
+                ensure_ascii=False,
+            )
+            write_workbook(
+                final_dir / "BN" / "BN_BUKHARI.xlsx",
+                ["book_id", "language_id", "hadith_id", "content"],
+                [["1", "bn", "1", keep_content], ["1", "bn", "2", blank_related_content]],
+            )
+
+            counts = hadith.write_updated_content_workbooks(
+                final_dir,
+                updated_dir,
+                books_path,
+                input_dir=input_dir,
+                missing_input_dir=missing_dir,
+            )
+
+            updated_rows = read_rows(updated_dir / "BN" / "BN_BUKHARI.xlsx")
+            missing_rows = read_rows(missing_dir / "[V1] BUKHARI-BANGLA_missing.xlsx")
+            self.assertEqual(counts, {"BN/BN_BUKHARI.xlsx": 1})
+            self.assertEqual(len(updated_rows), 2)
+            self.assertEqual(updated_rows[1][2], "1")
+            self.assertEqual([row[0] for row in missing_rows[1:]], ["9", "2"])
+            self.assertEqual(missing_rows[2], ("2", "আরবি দুই", "বাংলা দুই"))
 
     def test_existing_output_workbook_can_be_formatted_in_place(self):
         with tempfile.TemporaryDirectory() as tmp:
