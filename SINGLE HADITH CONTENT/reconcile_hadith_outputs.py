@@ -33,6 +33,13 @@ CATALOG_BOOK_ALIASES = {
 FIELD_RE = re.compile(r"\b(id|arabic|translation)\s*:", re.IGNORECASE)
 DIGIT_TRANSLATION = str.maketrans("০১২৩৪৫৬৭۸۹۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")
 BLOCKED_RESPONSE_TERMS = ("seo", "keyword", "lsi", "ইনপুটে", "ইনপুট")
+DIGIT_TRANSLATION = str.maketrans(
+    {
+        chr(start + digit): str(digit)
+        for start in (0x09E6, 0x0660, 0x06F0)
+        for digit in range(10)
+    }
+)
 BENGALI_RE = re.compile(r"[\u0980-\u09FF]")
 LATIN_RE = re.compile(r"[A-Za-z]")
 URDU_PERSIAN_RE = re.compile(r"[\u0679\u067E\u0686\u0688\u0691\u0698\u06A9\u06AF\u06BA\u06BE\u06C1\u06CC\u06D2]")
@@ -1124,7 +1131,7 @@ def _normalize_related_hadith_text(
         return None, f"related_hadiths[{index}]: no BOOKS.xlsx id for {collection} in language {language_id or 'unknown'}"
 
     return {
-        "id": hadith_match.group(0),
+        "id": normalize_id(hadith_match.group(0)),
         "book_id": book_id,
         "label": _related_book_label(collection),
     }, None

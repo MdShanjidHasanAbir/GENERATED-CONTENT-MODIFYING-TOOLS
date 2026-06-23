@@ -101,6 +101,43 @@ class HadithSelectiveParsingTest(unittest.TestCase):
             self.assertEqual(rows[0], ("book_id", "language_id", "hadith_id", "content", "content_error_details"))
             self.assertTrue(len(rows[1]) < 5 or rows[1][4] is None)
 
+    def test_updated_content_converts_mixed_bengali_related_hadith_ids_to_ascii(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            books_path = root / "BOOKS.xlsx"
+            final_dir = root / "BOOK WISE FINAL"
+            updated_dir = root / "BOOK WISE FINAL UPDATED CONTENT"
+            write_workbook(
+                books_path,
+                ["id", "language_id", "book_name"],
+                [["1", "bn", "BUKHARI"], ["2", "bn", "MUSLIM"]],
+            )
+            content = json.dumps(
+                {
+                    "heading": "Example",
+                    "related_hadiths": ["Sahih Bukhari 631\u09ee", "Sahih Muslim 1\u09ef0\u09ed"],
+                },
+                ensure_ascii=False,
+            )
+            write_workbook(
+                final_dir / "BN" / "BN_BUKHARI.xlsx",
+                ["book_id", "language_id", "hadith_id", "content"],
+                [["1", "bn", "1", content]],
+            )
+
+            hadith.write_updated_content_workbooks(final_dir, updated_dir, books_path)
+
+            rows = read_rows(updated_dir / "BN" / "BN_BUKHARI.xlsx")
+            converted = json.loads(rows[1][3])
+            self.assertEqual(
+                converted["related_hadiths"],
+                [
+                    {"id": "6318", "book_id": "1", "label": "Sahih Bukhari"},
+                    {"id": "1907", "book_id": "2", "label": "Sahih Muslim"},
+                ],
+            )
+            self.assertTrue(len(rows[1]) < 5 or rows[1][4] is None)
+
     def test_selected_reconciled_files_update_book_wise_final_without_removing_existing_files(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
